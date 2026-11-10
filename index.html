@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Omri Smadar — Interplanetary Affair</title>
+<meta name="description" content="Omri Smadar. Composer, producer, live electronic act.">
+<meta name="theme-color" content="#000000">
+<script>
+// Phones get the dedicated mobile page. ?view=desktop forces this one.
+(function () {
+  var forced = /[?&]view=desktop/.test(location.search);
+  var phone = /Android.+Mobile|iPhone|iPod|Windows Phone|webOS|BlackBerry|Opera Mini/i.test(navigator.userAgent) ||
+    (matchMedia('(pointer: coarse)').matches && Math.min(screen.width, screen.height) < 600);
+  if (phone && !forced) location.replace('mobile.html' + location.hash);
+})();
+</script>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body class="locked">
+
+<canvas id="space" aria-hidden="true"></canvas>
+<div class="grain" aria-hidden="true"></div>
+
+<!-- Hold-to-launch gate -->
+<div id="gate">
+  <p class="gate-name">Omri Smadar</p>
+  <button id="launch" aria-label="Press and hold to launch with sound">
+    <svg viewBox="0 0 120 120" aria-hidden="true">
+      <circle class="ring-bg" cx="60" cy="60" r="54"/>
+      <circle class="ring-fg" cx="60" cy="60" r="54"/>
+    </svg>
+    <span class="launch-core"></span>
+  </button>
+  <p class="gate-hint">Press and hold</p>
+  <p class="gate-sub">Sound on. This is a live experience.</p>
+</div>
+
+<header id="nav">
+  <a class="brand" href="#top">Omri Smadar</a>
+  <nav>
+    <a href="#tour">Tour</a>
+    <a href="#clips">Clips</a>
+    <a href="#journey">Journey</a>
+    <a href="#music">Music</a>
+    <a href="#contact">Contact</a>
+  </nav>
+  <button class="ask-btn" id="askOpen"><span class="orb"></span>Ask AI</button>
+</header>
+
+<main id="top">
+  <section class="hero">
+    <p class="eyebrow reveal">Composer · Producer · Live electronic act</p>
+    <div class="title-wrap">
+      <h1 class="hero-title" aria-label="Omri Smadar">
+        <span class="line" data-split>OMRI</span>
+        <span class="line" data-split>SMADAR</span>
+      </h1>
+      <canvas id="titleVideo" aria-hidden="true"></canvas>
+    </div>
+    <div class="deck" id="deck" role="group" aria-label="Title light show">
+      <button id="deckPrev" aria-label="Previous scenario">‹</button>
+      <span class="deck-name"><em id="deckNum"></em><b id="deckName"></b></span>
+      <button id="deckNext" aria-label="Next scenario">›</button>
+      <button id="deckLock" class="deck-lock" aria-pressed="false" title="Lock the current scenario or let them cycle">Auto</button>
+    </div>
+    <p class="hero-sub reveal">Interplanetary Affair. From a kibbutz on the Mediterranean to sunrise at Masada.</p>
+    <div class="hero-cta reveal">
+      <a class="btn solid" href="#tour">See him live</a>
+      <a class="btn ghost" href="#clips">Watch the clips</a>
+    </div>
+    <div class="scroll-cue" aria-hidden="true"><span></span></div>
+  </section>
+
+  <section class="stats" aria-label="In numbers">
+    <div class="stat reveal"><b data-count="713" data-suffix="K">0</b><span>views, Lose Your Soul live at Shuni</span></div>
+    <div class="stat reveal"><b data-count="475" data-suffix="K">0</b><span>views, sunrise at Masada</span></div>
+    <div class="stat reveal"><b data-count="7">0</b><span>cities, Euro Tour 2026</span></div>
+    <div class="stat reveal"><b data-count="3">0</b><span>albums</span></div>
+  </section>
+
+  <section id="tour" class="section">
+    <header class="section-head">
+      <p class="eyebrow reveal">Live</p>
+      <h2 class="reveal">Upcoming shows</h2>
+      <p class="live-tag" id="tourLive" hidden><i></i>Live from omrismadar.com</p>
+    </header>
+    <ol class="tour-list" id="tourList"></ol>
+    <div class="marquee" aria-label="Euro Tour 2026, completed"><div class="marquee-track" id="euroMarquee"></div></div>
+  </section>
+
+  <section class="portal" id="portal" aria-label="Live footage">
+    <div class="portal-sticky">
+      <div class="portal-frame" id="portalFrame">
+        <video id="liveVideo" src="https://omri-vids.b-cdn.net/OMRI%20WEBSITE%20VIDEO.mp4" muted loop playsinline preload="metadata" crossorigin="anonymous"></video>
+      </div>
+      <div class="portal-caption" id="portalCaption">
+        <p class="eyebrow">On stage</p>
+        <h2>This is what<br>live looks like.</h2>
+      </div>
+    </div>
+  </section>
+
+  <section id="clips" class="section clips">
+    <header class="section-head">
+      <p class="eyebrow reveal">Clips</p>
+      <h2 class="reveal">Thirty moons in orbit</h2>
+      <p class="lede reveal">Drag to spin. Click the front one to land.</p>
+    </header>
+    <div class="orbit-stage" id="orbitStage">
+      <div class="orbit-ring" id="orbitRing"></div>
+    </div>
+    <div class="orbit-info">
+      <button class="orbit-arrow" id="orbitPrev" aria-label="Previous clip">‹</button>
+      <div class="orbit-meta">
+        <h3 id="orbitTitle" dir="auto"></h3>
+        <p id="orbitSub"></p>
+        <button class="btn solid" id="orbitPlay">Play</button>
+      </div>
+      <button class="orbit-arrow" id="orbitNext" aria-label="Next clip">›</button>
+    </div>
+  </section>
+
+  <section id="journey" class="journey">
+    <div class="journey-sticky">
+      <header class="section-head">
+        <p class="eyebrow">Journey</p>
+        <h2>From a Yamaha to the stars</h2>
+      </header>
+      <div class="journey-track" id="journeyTrack"></div>
+      <div class="journey-bar"><i id="journeyBar"></i></div>
+    </div>
+  </section>
+
+  <section id="music" class="section">
+    <header class="section-head">
+      <p class="eyebrow reveal">Music</p>
+      <h2 class="reveal">Three albums. On vinyl.</h2>
+    </header>
+    <div class="vinyls" id="vinyls"></div>
+  </section>
+
+  <section id="contact" class="section contact">
+    <h2 class="giant reveal">Book the<br>next orbit.</h2>
+    <div class="contact-grid" id="contactGrid"></div>
+    <div class="socials" id="socials"></div>
+    <p class="fine">Fan-made concept. Not the official site. Official: <a href="https://omrismadar.com/" target="_blank" rel="noopener">omrismadar.com</a></p>
+  </section>
+</main>
+
+<!-- Now playing -->
+<button id="sound" class="sound" aria-pressed="false" aria-label="Toggle background track">
+  <span class="eq"><i></i><i></i><i></i><i></i></span>
+  <span class="sound-text"><b>Lose Your Soul</b><em>Live at Shuni Amphitheater</em></span>
+</button>
+<div id="bgPlayerWrap" aria-hidden="true"><div id="bgPlayer"></div></div>
+
+<!-- Clip player -->
+<div id="modal" class="modal" hidden>
+  <div class="modal-glow" id="modalGlow"></div>
+  <button class="modal-close" id="modalClose" aria-label="Close player">×</button>
+  <div class="modal-frame" id="modalFrame"></div>
+  <p class="modal-title" id="modalTitle" dir="auto"></p>
+</div>
+
+<!-- AI agent -->
+<aside id="agent" class="agent" aria-label="Ask about Omri Smadar" aria-hidden="true">
+  <header class="agent-head">
+    <span class="orb big"></span>
+    <div>
+      <b>Ask about Omri</b>
+      <em id="agentStatus">Starting…</em>
+    </div>
+    <button id="agentClear" title="New chat" aria-label="New chat">↺</button>
+    <button id="agentClose" aria-label="Close">×</button>
+  </header>
+  <div class="agent-log" id="agentLog" aria-live="polite"></div>
+  <div class="agent-chips" id="agentChips"></div>
+  <form class="agent-form" id="agentForm">
+    <input id="agentInput" dir="auto" autocomplete="off" placeholder="Tour dates, tracks, his story…" aria-label="Your question">
+    <button aria-label="Send">↑</button>
+  </form>
+  <p class="agent-foot" id="agentFoot"></p>
+</aside>
+
+<script src="data.js"></script>
+<script src="space.js"></script>
+<script src="app.js"></script>
+<script src="agent.js"></script>
+</body>
+</html>
