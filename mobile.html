@@ -171,6 +171,7 @@
       <b>Ask about Omri</b>
       <em id="agentStatus">Starting…</em>
     </div>
+    <button id="traceOpen" class="trace-btn" title="Under the hood" aria-label="View log">{ }</button>
     <button id="agentClear" title="New chat" aria-label="New chat">↺</button>
     <button id="agentClose" aria-label="Close">×</button>
   </header>
@@ -181,6 +182,18 @@
     <button aria-label="Send">↑</button>
   </form>
   <p class="agent-foot" id="agentFoot"></p>
+</aside>
+
+<!-- Under-the-hood log -->
+<aside id="trace" class="trace" aria-label="Agent log" aria-hidden="true">
+  <header class="trace-head">
+    <span class="trace-dots"><i></i><i></i><i></i></span>
+    <b>under the hood</b>
+    <button id="traceClear" title="Clear log">clear</button>
+    <button id="traceClose" aria-label="Close log">×</button>
+  </header>
+  <div class="trace-stats" id="traceStats"></div>
+  <div class="trace-body" id="traceBody"></div>
 </aside>
 
 <script src="data.js"></script>
