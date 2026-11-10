@@ -251,6 +251,36 @@ ${live.text || 'none yet'}`;
   }
   const num = v => parseFloat(v) * (/K/.test(v) ? 1e3 : /M/.test(v) ? 1e6 : 1) || 0;
 
+  /* ---------- Precomputed answers ---------- */
+  // We wrote the suggestion chips, so we already know these questions. Their answers are built straight
+  // from the data (live tour dates included) and never go to the model.
+  const CHIPS = ['When is the next show?', 'Most watched clips', 'Play Live at Masada', 'How did he start?', 'Tell me about the albums', 'How do I book him?'];
+  const upcoming = () => D.events.filter(e => new Date(e.date + 'T23:59:59') >= new Date()).sort((x, y) => x.date.localeCompare(y.date));
+  const showLine = e => `**${fmt(e.date)}** · ${e.title}, ${e.venue}${e.city ? ', ' + e.city : ''}`;
+  const CANNED = {
+    'when is the next show?'() {
+      const up = upcoming(); if (!up.length) return 'No upcoming shows are listed right now. Check [omrismadar.com](https://omrismadar.com/).';
+      const next = up[0], open = up.find(e => e.status !== 'soldout');
+      let s = `The next show is ${showLine(next)}. ` + (next.status === 'soldout' ? 'It is **sold out**.' : `[Get tickets](${next.url}).`);
+      if (next.status === 'soldout' && open) s += `\nThe next one with tickets is ${showLine(open)}. [Get tickets](${open.url}).`;
+      return s + (up.length > 1 ? `\n${up.length} shows are listed in total; they are all in the Tour section.` : '');
+    },
+    'most watched clips'() {
+      const top = [...D.clips].sort((x, y) => num(y.views) - num(x.views)).slice(0, 5);
+      return 'The five most watched clips on his channel:\n' + top.map(c => `- **${c.title}** · ${c.views} views`).join('\n') + '\nSay "play" and a title and I will open it.';
+    },
+    'how did he start?'() {
+      return D.journey.slice(0, 7).map(j => `- **${j.tag}**: ${j.title}. ${j.text}`).join('\n');
+    },
+    'tell me about the albums'() {
+      return D.albums.map(al => `- **${al.title}**: ${al.note} [Bandcamp](${al.url})`).join('\n');
+    },
+    'how do i book him?'() {
+      const c = D.contact;
+      return `**Booking:** ${c.booking.phone}, also on [WhatsApp](${c.booking.whatsapp}).\n**Management:** ${c.management.name}, ${c.management.phone}.`;
+    }
+  };
+
   /* ---------- Site actions the agent can take ---------- */
   function tryAction(q) {
     const s = q.toLowerCase();
@@ -307,10 +337,14 @@ ${live.text || 'none yet'}`;
     const g = group('ask', q);
     let answer = '', path = 'basic', firstAt = 0, chunks = 0, streamMs = 0;
     try {
-      const it = step(g, 'intent', 'is this a site action (play / open a clip)?');
-      const acted = tryAction(q);
-      it.done(acted ? 'yes: driving the page, no model needed' : 'no: this is a question');
-      if (acted) { answer = acted; path = 'action'; }
+      const pre = CANNED[q.toLowerCase()];
+      const it = pre ? null : step(g, 'intent', 'is this a site action (play / open a clip)?');
+      const acted = pre ? null : tryAction(q);
+      if (it) it.done(acted ? 'yes: driving the page, no model needed' : 'no: this is a question');
+      if (pre) { // a suggested question: we know the answer's shape, so build it from the data
+        const cs = step(g, 'canned', 'suggested question: answer built from the data, model skipped');
+        answer = pre(); cs.body(answer).done(); path = 'precomputed';
+      } else if (acted) { answer = acted; path = 'action'; }
       else if (nano === 'ready' || nano === 'download') {
         path = 'nano';
         note(g, 'context', `built-in facts + live web data (${live.at ? 'synced ' + ago(live.at) : 'none'}, ${live.text.length} chars)`, live.text);
@@ -355,7 +389,7 @@ ${live.text || 'none yet'}`;
     bubble.innerHTML = md(answer || 'I don\'t know that one.');
     const bits = [secs(total)];
     if (firstAt) bits.push(`first word ${secs(firstAt - t0)}`, `${(chunks / Math.max(streamMs / 1000, 0.05)).toFixed(0)} tok/s`);
-    else bits.push(path === 'action' ? 'site action' : path === 'nano' ? 'no output' : 'built-in facts');
+    else bits.push(path === 'action' ? 'site action' : path === 'precomputed' ? 'precomputed, no AI' : path === 'nano' ? 'no output' : 'built-in facts');
     tEl.textContent = bits[0]; phEl.textContent = bits.slice(1).join(' · '); meta.classList.remove('run');
     note(g, 'render', `${answer.length} chars shown`);
     endGroup(g, `${path} · total ${bits.join(' · ')}`);
@@ -370,7 +404,6 @@ ${live.text || 'none yet'}`;
     add('ai', md('Hey. Ask me anything about **Omri Smadar**: shows, tracks, albums, his story. I can also play a clip for you.'));
     if (nano === 'none') add('note', 'Gemini Nano is not available in this browser, so I am in basic mode. Open in desktop Chrome with the built-in AI enabled for full answers.');
   }
-  const CHIPS = ['When is the next show?', 'Most watched clips', 'Play Live at Masada', 'How did he start?', 'Tell me about the albums', 'How do I book him?'];
   $('#agentChips').innerHTML = CHIPS.map(c => `<button type="button">${c}</button>`).join('');
   $('#agentChips').addEventListener('click', e => { if (e.target.tagName === 'BUTTON') ask(e.target.textContent); });
   $('#agentForm').addEventListener('submit', e => { e.preventDefault(); ask(input.value); });

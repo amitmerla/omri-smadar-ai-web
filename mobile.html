@@ -51,18 +51,58 @@
 <main id="top">
   <section class="hero">
     <p class="eyebrow reveal">Composer · Producer · Live electronic act</p>
-    <div class="title-wrap">
-      <h1 class="hero-title" aria-label="Omri Smadar">
-        <span class="line" data-split>OMRI</span>
-        <span class="line" data-split>SMADAR</span>
-      </h1>
-      <canvas id="titleVideo" aria-hidden="true"></canvas>
-    </div>
-    <div class="deck" id="deck" role="group" aria-label="Title light show">
-      <button id="deckPrev" aria-label="Previous scenario">‹</button>
-      <span class="deck-name"><em id="deckNum"></em><b id="deckName"></b></span>
-      <button id="deckNext" aria-label="Next scenario">›</button>
-      <button id="deckLock" class="deck-lock" aria-pressed="false" title="Lock the current scenario or let them cycle">Auto</button>
+    <div class="hero-stage">
+      <div class="title-col">
+      <div class="title-wrap">
+        <h1 class="hero-title" aria-label="Omri Smadar">
+          <span class="line" data-split>OMRI</span>
+          <span class="line" data-split>SMADAR</span>
+        </h1>
+        <canvas id="titleVideo" aria-hidden="true"></canvas>
+      </div>
+      <div class="deck" id="deck" role="group" aria-label="Title light show">
+        <button id="deckPrev" aria-label="Previous scenario">‹</button>
+        <span class="deck-name"><em id="deckNum"></em><b id="deckName"></b></span>
+        <button id="deckNext" aria-label="Next scenario">›</button>
+        <button id="deckLock" class="deck-lock" aria-pressed="false" title="Lock the current scenario or let them cycle">Auto</button>
+      </div>
+      </div>
+      <div class="rig zero" id="rig" role="group" aria-label="DJ deck">
+        <div class="tt">
+          <span class="tt-brand">SL-OMRI · quartz direct drive</span>
+          <div class="tt-platter">
+            <div class="tt-dots" id="ttDots"></div>
+            <div class="tt-record" id="ttRecord"><span class="tt-label">OMRI<br>SMADAR</span></div>
+            <i class="tt-spindle"></i>
+          </div>
+          <i class="tt-strobe" aria-hidden="true"></i>
+          <div class="tt-arm" aria-hidden="true"><i></i></div>
+          <button class="tt-start" id="ttStart" aria-pressed="false" aria-label="Start or stop the record">Start<br>Stop</button>
+          <div class="tt-speed"><button id="tt33" class="on" aria-label="33 rpm">33</button><button id="tt45" aria-label="45 rpm">45</button></div>
+          <div class="tt-pitch">
+            <input type="range" id="ttPitch" min="-8" max="8" step="0.1" value="0" aria-label="Pitch, plus or minus 8 percent">
+            <i class="tt-led" aria-hidden="true"></i>
+          </div>
+          <output class="tt-pitch-out" id="ttPitchOut">0.0%</output>
+          <span class="tt-title" id="ttTitle"></span>
+        </div>
+        <div class="mx">
+          <div class="mx-lcd"><b id="mxBpm">---.-</b><span>BPM</span><em id="mxInfo">press start</em></div>
+          <div class="mx-eq">
+            <div class="mx-knobs">
+              <div class="mx-k"><div class="knob" data-k="hi" role="slider" tabindex="0" aria-label="Treble" aria-valuemin="0" aria-valuemax="100"><i></i></div><label>HI</label></div>
+              <div class="mx-k"><div class="knob" data-k="mid" role="slider" tabindex="0" aria-label="Mid" aria-valuemin="0" aria-valuemax="100"><i></i></div><label>MID</label></div>
+              <div class="mx-k"><div class="knob" data-k="low" role="slider" tabindex="0" aria-label="Bass" aria-valuemin="0" aria-valuemax="100"><i></i></div><label>LOW</label></div>
+            </div>
+            <div class="mx-meter" id="mxMeter" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+          </div>
+          <div class="mx-fx">
+            <button id="mxFx" aria-pressed="false">Flanger</button>
+            <div class="mx-k"><div class="knob small" data-k="fx" role="slider" tabindex="0" aria-label="Flanger depth" aria-valuemin="0" aria-valuemax="100"><i></i></div><label>DEPTH</label></div>
+          </div>
+          <input type="range" class="mx-vol" id="mxVol" min="0" max="100" value="85" aria-label="Channel volume">
+        </div>
+      </div>
     </div>
     <p class="hero-sub reveal">Interplanetary Affair. From a kibbutz on the Mediterranean to sunrise at Masada.</p>
     <div class="hero-cta reveal">
@@ -148,12 +188,11 @@
   </section>
 </main>
 
-<!-- Now playing -->
-<button id="sound" class="sound" aria-pressed="false" aria-label="Toggle background track">
+<!-- Mini now-playing pill, shown once the deck has scrolled out of view -->
+<button id="sound" class="sound" aria-pressed="false" aria-label="Start or stop the track">
   <span class="eq"><i></i><i></i><i></i><i></i></span>
-  <span class="sound-text"><b>Lose Your Soul</b><em>Live at Shuni Amphitheater</em></span>
+  <span class="sound-text"><b data-track-title>Deck</b><em data-track-bpm></em></span>
 </button>
-<div id="bgPlayerWrap" aria-hidden="true"><div id="bgPlayer"></div></div>
 
 <!-- Clip player -->
 <div id="modal" class="modal" hidden>
@@ -198,6 +237,7 @@
 
 <script src="data.js"></script>
 <script src="space.js"></script>
+<script src="deck.js"></script>
 <script src="app.js"></script>
 <script src="agent.js"></script>
 </body>

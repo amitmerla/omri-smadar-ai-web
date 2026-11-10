@@ -1,7 +1,8 @@
 // Baseline knowledge about Omri Smadar. Sourced from omrismadar.com and his YouTube channel (Nov 2026).
 // The AI agent layers live web data on top of this at runtime (see agent.js).
 window.OMRI = {
-  track: { id: 'cVrwpAySu8Y', title: 'Lose Your Soul', sub: 'Live at Shuni Amphitheater' },
+  // The deck plays this file when it exists; until then deck.js generates a stand-in groove.
+  track: { src: 'audio/track.mp3', title: 'Omri Smadar' },
 
   events: [
     { date: '2026-11-12', title: 'Omri Smadar Live', venue: 'Barby', city: 'Tel Aviv', status: 'soldout', url: 'https://barby.co.il/show/5503' },
