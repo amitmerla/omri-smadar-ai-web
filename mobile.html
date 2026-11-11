@@ -67,128 +67,36 @@
         <button id="deckLock" class="deck-lock" aria-pressed="false" title="Lock the current scenario or let them cycle">Auto</button>
       </div>
       </div>
-      <div class="rig zero" id="rig" role="group" aria-label="DJ deck">
-        <div class="tt">
-          <!-- Drawn to the proportions of a classic 1200-series direct-drive deck (453 x 353 mm) -->
-          <svg class="tt-art" viewBox="0 0 453 353" aria-hidden="true">
-            <defs>
-              <linearGradient id="ttAlu" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#eceef1"/><stop offset=".5" stop-color="#c3c7cd"/><stop offset="1" stop-color="#9fa4ac"/></linearGradient>
-              <linearGradient id="ttAluV" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f6f7f8"/><stop offset="1" stop-color="#9ea3ab"/></linearGradient>
-              <linearGradient id="ttTube" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#8d9299"/><stop offset=".45" stop-color="#ffffff"/><stop offset="1" stop-color="#8d9299"/></linearGradient>
-              <radialGradient id="ttKnob" cx=".35" cy=".3" r=".8"><stop offset="0" stop-color="#ffffff"/><stop offset=".55" stop-color="#b9bdc4"/><stop offset="1" stop-color="#6f747c"/></radialGradient>
-              <radialGradient id="ttDark" cx=".35" cy=".3" r=".9"><stop offset="0" stop-color="#55585f"/><stop offset="1" stop-color="#111214"/></radialGradient>
-              <radialGradient id="ttVinyl" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#0a0a0c"/><stop offset=".34" stop-color="#0a0a0c"/><stop offset=".36" stop-color="#1b1b1f"/><stop offset=".5" stop-color="#0c0c0e"/><stop offset=".62" stop-color="#1a1a1e"/><stop offset=".64" stop-color="#0b0b0d"/><stop offset=".8" stop-color="#19191d"/><stop offset=".97" stop-color="#0b0b0d"/><stop offset="1" stop-color="#232327"/></radialGradient>
-              <radialGradient id="ttRed" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#ff3b2f" stop-opacity=".95"/><stop offset="1" stop-color="#ff3b2f" stop-opacity="0"/></radialGradient>
-              <linearGradient id="ttSheen" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset=".5" stop-color="#fff" stop-opacity=".11"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
-              <linearGradient id="ttLabel" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#2a0d66"/><stop offset=".45" stop-color="#a06bff"/><stop offset=".7" stop-color="#ff8fd0"/><stop offset="1" stop-color="#3a148a"/></linearGradient>
-              <clipPath id="ttRim"><path d="M178 20a158 158 0 1 0 .01 0zM178 33a145 145 0 1 1-.01 0z" clip-rule="evenodd"/></clipPath>
-            </defs>
-
-            <!-- plinth: rubber base showing under the aluminium top -->
-            <rect x="0" y="6" width="453" height="347" rx="16" fill="#151618"/>
-            <rect x="0" y="0" width="453" height="344" rx="15" fill="url(#ttAlu)"/>
-            <rect x=".7" y=".7" width="451.6" height="342.6" rx="14.5" fill="none" stroke="#fff" stroke-opacity=".7" stroke-width="1.2"/>
-
-            <!-- 45 adapter in its recess, top left -->
-            <circle cx="34" cy="34" r="22" fill="#8f949c"/><circle cx="34" cy="34" r="19" fill="url(#ttKnob)"/><circle cx="34" cy="34" r="6.5" fill="#2a2c30"/>
-
-            <!-- platter: bevelled rim with four rows of strobe dots -->
-            <circle cx="178" cy="178" r="161" fill="#7d828a"/>
-            <circle cx="178" cy="178" r="158.5" fill="#34363b"/>
-            <g id="ttDots" class="tt-spin">
-              <circle cx="178" cy="178" r="156.2" fill="none" stroke="#f1f1f1" stroke-width="2.6" stroke-dasharray="2.1 3.35"/>
-              <circle cx="178" cy="178" r="152.8" fill="none" stroke="#f1f1f1" stroke-width="2.6" stroke-dasharray="2.1 3.1"/>
-              <circle cx="178" cy="178" r="149.4" fill="none" stroke="#f1f1f1" stroke-width="2.6" stroke-dasharray="2.1 3.55"/>
-              <circle cx="178" cy="178" r="146" fill="none" stroke="#f1f1f1" stroke-width="2.6" stroke-dasharray="2.1 2.9"/>
-            </g>
-            <circle class="tt-redglow" cx="62" cy="282" r="70" fill="url(#ttRed)" clip-path="url(#ttRim)"/>
-            <!-- rubber mat, then the record -->
-            <circle cx="178" cy="178" r="144" fill="#141416"/>
-            <circle cx="178" cy="178" r="141" fill="none" stroke="#26272b" stroke-width="2"/>
-            <g id="ttRecord" class="tt-spin">
-              <circle cx="178" cy="178" r="137" fill="url(#ttVinyl)"/>
-              <g fill="none" stroke="#000" stroke-opacity=".55" stroke-width=".7">
-                <circle cx="178" cy="178" r="128"/><circle cx="178" cy="178" r="117"/><circle cx="178" cy="178" r="104"/><circle cx="178" cy="178" r="92"/><circle cx="178" cy="178" r="78"/><circle cx="178" cy="178" r="64"/>
-              </g>
-              <circle cx="178" cy="178" r="47" fill="url(#ttLabel)"/>
-              <circle cx="178" cy="178" r="47" fill="none" stroke="#fff" stroke-opacity=".3"/>
-              <text x="178" y="163" text-anchor="middle" font-size="10" font-weight="800" letter-spacing="2.2" fill="#fff">OMRI</text>
-              <text x="178" y="203" text-anchor="middle" font-size="8.5" font-weight="800" letter-spacing="2" fill="#fff">SMADAR</text>
-              <text x="178" y="214" text-anchor="middle" font-size="4.6" letter-spacing="1.4" fill="#fff" fill-opacity=".8">33 1/3 RPM · SIDE A</text>
-            </g>
-            <!-- light on the vinyl stays put while the record turns -->
-            <path d="M178 178 L60 108 A137 137 0 0 1 108 60 Z" fill="url(#ttSheen)"/>
-            <path d="M178 178 L296 248 A137 137 0 0 1 248 296 Z" fill="url(#ttSheen)"/>
-            <circle cx="178" cy="178" r="4.2" fill="url(#ttKnob)"/>
-
-            <!-- strobe / power turret, front left -->
-            <circle cx="40" cy="288" r="21" fill="#74797f"/><circle cx="40" cy="288" r="18.5" fill="url(#ttKnob)"/>
-            <circle cx="40" cy="288" r="12" fill="url(#ttDark)"/>
-            <path class="tt-lamp" d="M48 273 a17 17 0 0 1 9 9 l-8 5 a8 8 0 0 0 -5 -6z" fill="#3a1512"/>
-            <text x="40" y="290.5" text-anchor="middle" font-size="5" font-weight="700" fill="#d9dbe0">ON</text>
-
-            <!-- stylus light, front right of the platter -->
-            <circle cx="318" cy="322" r="10" fill="#74797f"/><circle cx="318" cy="322" r="8" fill="url(#ttKnob)"/><circle cx="318" cy="322" r="3" fill="#2a2c30"/>
-
-            <!-- pitch plate -->
-            <rect x="371" y="192" width="70" height="146" rx="5" fill="#b3b7be" stroke="#7b8088" stroke-width=".8"/>
-            <rect x="401" y="206" width="9" height="122" rx="3" fill="#0e0f11"/>
-            <g stroke="#2a2c30" stroke-width=".9">
-              <path d="M388 212h8M388 226h5M388 240h8M388 254h5M388 267h10M388 280h5M388 294h8M388 308h5M388 322h8"/>
-              <path d="M415 212h8M418 226h5M415 240h8M418 254h5M413 267h10M418 280h5M415 294h8M418 308h5M415 322h8"/>
-            </g>
-            <g font-size="5.4" font-weight="700" fill="#24262b" text-anchor="end">
-              <text x="386" y="214">8</text><text x="386" y="242">4</text><text x="386" y="269">0</text><text x="386" y="296">4</text><text x="386" y="324">8</text>
-            </g>
-            <text x="384" y="207" font-size="4.6" font-weight="700" fill="#24262b" text-anchor="end">−</text><text x="384" y="333" font-size="4.6" font-weight="700" fill="#24262b" text-anchor="end">+</text>
-            <text x="406" y="201" text-anchor="middle" font-size="4.6" font-weight="700" letter-spacing=".8" fill="#24262b">PITCH ADJ.</text>
-            <circle class="tt-zero" cx="430" cy="267" r="2.4" fill="#2c3a2e"/>
-
-            <!-- tonearm base: gimbal, anti-skate, cue lever, arm rest -->
-            <circle cx="392" cy="96" r="39" fill="#8a8f97"/><circle cx="392" cy="96" r="36" fill="url(#ttAluV)"/>
-            <circle cx="392" cy="96" r="27" fill="#2b2d31"/>
-            <circle cx="432" cy="146" r="10" fill="url(#ttDark)"/><path d="M432 138v8" stroke="#fff" stroke-width="1.4"/>
-            <rect x="366" y="196" width="9" height="16" rx="3" fill="#2b2d31"/>
-            <g class="tt-arm">
-              <rect x="377" y="24" width="30" height="40" rx="6" fill="url(#ttDark)"/>
-              <rect x="379" y="30" width="26" height="5" fill="#fff" fill-opacity=".14"/>
-              <path d="M392 62V96" stroke="url(#ttTube)" stroke-width="8" stroke-linecap="round"/>
-              <path d="M392 96C396 150 372 176 367 218S358 276 352 300" fill="none" stroke="#5f646c" stroke-width="6.4" stroke-linecap="round"/>
-              <path d="M392 96C396 150 372 176 367 218S358 276 352 300" fill="none" stroke="#eef0f2" stroke-width="4" stroke-linecap="round"/>
-              <circle cx="392" cy="96" r="15" fill="url(#ttKnob)"/><circle cx="392" cy="96" r="6" fill="#2b2d31"/>
-              <g transform="rotate(14 352 300)">
-                <rect x="345" y="294" width="14" height="27" rx="2.5" fill="#101113"/>
-                <rect x="347" y="315" width="10" height="5" fill="#c9ccd2"/>
-                <path d="M359 300h11" stroke="#d5d8dd" stroke-width="2.2" stroke-linecap="round"/>
-              </g>
-            </g>
-
-            <text x="232" y="349.5" text-anchor="middle" font-size="5" font-weight="700" letter-spacing="1.6" fill="#d7d9de">SL-OMRI · QUARTZ · DIRECT DRIVE</text>
-          </svg>
-          <button class="tt-start" id="ttStart" aria-pressed="false" aria-label="Start or stop the record">START · STOP</button>
-          <div class="tt-speed"><button id="tt33" class="on" aria-label="33 rpm">33</button><button id="tt45" aria-label="45 rpm">45</button></div>
-          <div class="tt-pitch">
-            <input type="range" id="ttPitch" min="-8" max="8" step="0.1" value="0" aria-label="Pitch, plus or minus 8 percent">
-          </div>
-          <output class="tt-pitch-out" id="ttPitchOut">0.0%</output>
+      <div class="rig" id="rig" role="group" aria-label="Delay pedal">
+        <div class="tp">
+          <button id="tpPlay" aria-pressed="false" aria-label="Start or stop the track"></button>
+          <span class="tp-title" id="ttTitle">Track</span>
+          <span class="tp-bpm"><b id="mxBpm">---.-</b> BPM <em id="mxInfo"></em></span>
+          <input type="range" class="mx-vol" id="mxVol" min="0" max="100" value="85" aria-label="Volume">
         </div>
-        <div class="mx">
-          <div class="mx-lcd"><b id="mxBpm">---.-</b><span>BPM</span><em id="mxInfo">press start</em></div>
-          <div class="mx-eq">
-            <div class="mx-knobs">
-              <div class="mx-k"><div class="knob" data-k="hi" role="slider" tabindex="0" aria-label="Treble" aria-valuemin="0" aria-valuemax="100"><i></i></div><label>HI</label></div>
-              <div class="mx-k"><div class="knob" data-k="mid" role="slider" tabindex="0" aria-label="Mid" aria-valuemin="0" aria-valuemax="100"><i></i></div><label>MID</label></div>
-              <div class="mx-k"><div class="knob" data-k="low" role="slider" tabindex="0" aria-label="Bass" aria-valuemin="0" aria-valuemax="100"><i></i></div><label>LOW</label></div>
+        <div class="pd">
+          <div class="pd-top"><span class="pd-logo">OMRI<b>6</b></span><span class="pd-name"><b>OS4</b> MkII</span></div>
+          <div class="pd-panel">
+            <div class="pd-sel">
+              <div class="pd-labels" id="pdLabels"></div>
+              <div class="knob sel" id="pdSel" role="slider" tabindex="0" aria-label="Delay model"><i></i></div>
+              <button class="pd-alt" id="pdAlt" aria-pressed="true" aria-label="Switch between new and legacy models"></button>
+              <span class="pd-altl">ALT<b>LEGACY</b></span>
             </div>
-            <div class="mx-meter" id="mxMeter" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+            <div class="pd-k"><div class="knob" data-k="time" role="slider" tabindex="0" aria-label="Delay time or subdivision" aria-valuemin="0" aria-valuemax="100"><i></i></div><label>TIME<span>/SUBDIV</span></label></div>
+            <div class="pd-k"><div class="knob" data-k="repeats" role="slider" tabindex="0" aria-label="Repeats" aria-valuemin="0" aria-valuemax="100"><i></i></div><label>REPEATS</label></div>
+            <div class="pd-k"><div class="knob" data-k="tweak" role="slider" tabindex="0" aria-label="Tweak" aria-valuemin="0" aria-valuemax="100"><i></i></div><label>TWEAK</label></div>
+            <div class="pd-k"><div class="knob" data-k="tweez" role="slider" tabindex="0" aria-label="Tweez" aria-valuemin="0" aria-valuemax="100"><i></i></div><label>TWEEZ</label></div>
+            <div class="pd-k"><div class="knob" data-k="mix" role="slider" tabindex="0" aria-label="Mix" aria-valuemin="0" aria-valuemax="100"><i></i></div><label>MIX</label></div>
           </div>
-          <div class="mx-fx">
-            <button id="mxFx" aria-pressed="false">Flanger</button>
-            <div class="mx-k"><div class="knob small" data-k="fx" role="slider" tabindex="0" aria-label="Flanger depth" aria-valuemin="0" aria-valuemax="100"><i></i></div><label>DEPTH</label></div>
+          <div class="pd-foot">
+            <div class="fs"><b>A</b><button id="fsA" aria-label="Footswitch A"></button><span>● / DUB</span></div>
+            <div class="fs"><b>B</b><button id="fsB" aria-label="Footswitch B"></button><span>▶ / ■</span></div>
+            <div class="fs"><b>C</b><button id="fsC" aria-label="Footswitch C"></button><span>▶ ONCE</span></div>
+            <div class="fs"><b>TAP</b><button id="fsTAP" aria-label="Footswitch TAP"></button><span>½ / ←</span></div>
           </div>
-          <input type="range" class="mx-vol" id="mxVol" min="0" max="100" value="85" aria-label="Channel volume">
         </div>
-        <p class="rig-note" id="ttTitle"></p>
+        <p class="rig-note" id="pdRead"></p>
       </div>
     </div>
     <p class="hero-sub reveal">Interplanetary Affair. From a kibbutz on the Mediterranean to sunrise at Masada.</p>
