@@ -84,8 +84,12 @@
             <div class="mx-meter" id="mxMeter" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
           </div>
           <div class="mx-fx">
-            <button id="mxFx" aria-pressed="false">Flanger</button>
-            <div class="mx-k"><div class="knob mk small" data-m="fx" role="slider" tabindex="0" aria-label="Flanger depth" aria-valuemin="0" aria-valuemax="100"><i></i></div><label>DEPTH</label></div>
+            <div class="mx-sel"><button id="mxPrev" aria-label="Previous effect">‹</button><span id="mxName">Flanger</span><button id="mxNext" aria-label="Next effect">›</button></div>
+            <div class="mx-opts" id="mxOpts" role="group" aria-label="Effect option"><button></button><button></button><button></button><button></button></div>
+            <div class="mx-go">
+              <button id="mxFx" aria-pressed="false">Off</button>
+              <div class="mx-k"><div class="knob mk small" data-m="fx" role="slider" tabindex="0" aria-label="Effect depth" aria-valuemin="0" aria-valuemax="100"><i></i></div><label>DEPTH</label></div>
+            </div>
           </div>
           <input type="range" class="mx-vol" id="mxVol" min="0" max="100" value="85" aria-label="Master volume">
         </div>

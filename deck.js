@@ -9,10 +9,12 @@
 
   const audio = new Audio();
   audio.crossOrigin = 'anonymous'; audio.loop = true; audio.preload = 'auto';
+  audio.preservesPitch = audio.webkitPreservesPitch = false; // so the BRAKE effect drops in pitch like vinyl
 
   const st = { want: false, period: 0, phase: 0, analysed: false };
   let ctx = null, analyser = null, inAn = null, master = null, pre = null, input = null, out = null, P = null, SY = null;
-  const eq = {}, fl = {};
+  const eq = {}, fl = {}, X = {}; // X: the mixer's effect nodes
+  let trackBuf = null;
   let outLevel = 0;
   let beatPos = 0, wraps = 0, lastCT = 0, lastT = performance.now(), inLevel = 0;
   const freq = new Uint8Array(1024), wave = new Uint8Array(2048), inWave = new Uint8Array(512);
@@ -84,16 +86,12 @@
     const limiter = ctx.createDynamicsCompressor(); limiter.threshold.value = -3; limiter.ratio.value = 20; limiter.attack.value = 0.002; // runaway repeats stay safe
     analyser = ctx.createAnalyser(); analyser.fftSize = 2048; analyser.smoothingTimeConstant = 0.72;
     inAn = ctx.createAnalyser(); inAn.fftSize = 512;
-    // mixer channel: three-band EQ, then a flanger (a very short delay swept by a slow LFO and fed back into itself)
+    // mixer channel: three-band EQ, then the effect section (see "Mixer effects" below)
     pre = ctx.createGain();
     const shelf = (type, f) => { const n = ctx.createBiquadFilter(); n.type = type; n.frequency.value = f; return n; };
     eq.low = shelf('lowshelf', 220); eq.mid = shelf('peaking', 1000); eq.mid.Q.value = 0.7; eq.hi = shelf('highshelf', 3600);
-    fl.delay = ctx.createDelay(0.05); fl.delay.delayTime.value = 0.004;
-    fl.wet = ctx.createGain(); fl.wet.gain.value = 0; fl.fb = ctx.createGain(); fl.fb.gain.value = 0;
-    fl.lfo = ctx.createOscillator(); fl.lfo.frequency.value = 0.28; fl.depth = ctx.createGain(); fl.depth.gain.value = 0.0028;
-    fl.lfo.connect(fl.depth); fl.depth.connect(fl.delay.delayTime); fl.lfo.start();
     src.connect(pre); pre.connect(eq.low); eq.low.connect(eq.mid); eq.mid.connect(eq.hi);
-    eq.hi.connect(input); eq.hi.connect(fl.delay); fl.delay.connect(fl.fb); fl.fb.connect(fl.delay); fl.delay.connect(fl.wet); fl.wet.connect(input);
+    buildFx(eq.hi);
     input.connect(inAn);
     buildPedal(); buildSynth(); applyMixer();
     out.connect(master); master.connect(limiter); limiter.connect(analyser); analyser.connect(ctx.destination);
@@ -105,8 +103,8 @@
     const info = $('#mxInfo'); info.textContent = 'loading';
     let buf = null, title = D.track.title;
     try {
-      if (await hasTrack()) { audio.src = D.track.src; sync(); buf = await ctx.decodeAudioData(await (await fetch(D.track.src)).arrayBuffer()); }
-      else { buf = await renderGroove(); audio.src = toWav(buf); title = 'Demo groove, not Omri · add audio/track.mp3'; sync(); }
+      if (await hasTrack()) { audio.src = D.track.src; sync(); buf = trackBuf = await ctx.decodeAudioData(await (await fetch(D.track.src)).arrayBuffer()); }
+      else { buf = trackBuf = await renderGroove(); audio.src = toWav(buf); title = 'Demo groove, not Omri · add audio/track.mp3'; sync(); }
     } catch (e) { console.warn('deck: could not load audio', e); }
     $('#ttTitle').textContent = title;
     document.querySelectorAll('[data-track-title]').forEach(e => (e.textContent = title.split(' · ')[0]));
@@ -183,19 +181,171 @@
     paintAll();
   }
 
-  /* ---------- Mixer channel ---------- */
+  /* ---------- Mixer channel: EQ knobs ---------- */
   const MXK = { hi: 0.5, mid: 0.5, low: 0.5, fx: 0.6 };
-  let fxOn = false;
   const eqDb = v => (v < 0.5 ? -26 * (1 - v * 2) : 6 * (v * 2 - 1)); // full kill at the bottom, +6 dB at the top
   function applyMixer() {
     if (!ctx) return;
     const t = ctx.currentTime;
     eq.hi.gain.setTargetAtTime(eqDb(MXK.hi), t, 0.02); eq.mid.gain.setTargetAtTime(eqDb(MXK.mid), t, 0.02); eq.low.gain.setTargetAtTime(eqDb(MXK.low), t, 0.02);
-    fl.wet.gain.setTargetAtTime(fxOn ? 0.35 + MXK.fx * 0.6 : 0, t, 0.03);
-    fl.fb.gain.setTargetAtTime(fxOn ? 0.3 + MXK.fx * 0.5 : 0, t, 0.03);
+    fxApply();
   }
+
+  /* ---------- Mixer effects: a selector picks one, ON fires it, DEPTH and four option buttons shape it ---------- */
+  // In-line (in this order): DJ filter -> phaser -> auto-wah -> bit-crusher -> gater -> pump -> CUT.
+  // From just before CUT, sends feed the flanger, beat roll, echo, reverb and freeze loops, which rejoin after it.
+  // CUT is how roll, echo out, freeze and spinback make the track drop out underneath them.
+  function buildFx(from) {
+    const g = v => { const n = ctx.createGain(); n.gain.value = v; return n; };
+    const bq = (type, f, q) => { const n = ctx.createBiquadFilter(); n.type = type; n.frequency.value = f; n.Q.value = q || 0.7; return n; };
+    const lfo = f => { const o = ctx.createOscillator(); o.frequency.value = f; o.start(); return o; };
+    X.lp = bq('lowpass', 20000); X.hp = bq('highpass', 10);
+    from.connect(X.lp); X.lp.connect(X.hp);
+    // phaser: four all-pass stages swept by an LFO, mixed back with the dry signal so moving notches appear
+    X.phOut = g(1); X.phWet = g(0); X.phLfo = lfo(0.25); X.phDepth = g(0);
+    let node = X.hp; X.hp.connect(X.phOut);
+    for (let i = 0; i < 4; i++) { const ap = bq('allpass', 900 + i * 350, 0.6); node.connect(ap); X.phLfo.connect(X.phDepth); X.phDepth.connect(ap.detune); node = ap; }
+    node.connect(X.phWet); X.phWet.connect(X.phOut);
+    // auto-wah: a resonant band-pass that opens and closes in time, cross-faded against the dry signal
+    X.wahOut = g(1); X.wahDry = g(1); X.wahWet = g(0); X.wah = bq('bandpass', 900, 4); X.wahLfo = lfo(1); X.wahDepth = g(0);
+    X.phOut.connect(X.wahDry); X.wahDry.connect(X.wahOut); X.phOut.connect(X.wah); X.wah.connect(X.wahWet); X.wahWet.connect(X.wahOut);
+    X.wahLfo.connect(X.wahDepth); X.wahDepth.connect(X.wah.detune);
+    X.crush = ctx.createWaveShaper(); X.gate = g(1); X.pump = g(1); X.cut = g(1);
+    X.wahOut.connect(X.crush); X.crush.connect(X.gate); X.gate.connect(X.pump); X.pump.connect(X.cut); X.cut.connect(input);
+    const tap = X.pump;
+    // flanger: a very short delay swept by a slow LFO and fed back into itself
+    fl.delay = ctx.createDelay(0.05); fl.delay.delayTime.value = 0.004; fl.wet = g(0); fl.fb = g(0); fl.lfo = lfo(0.28); fl.depth = g(0.0028);
+    fl.lfo.connect(fl.depth); fl.depth.connect(fl.delay.delayTime);
+    tap.connect(fl.delay); fl.delay.connect(fl.fb); fl.fb.connect(fl.delay); fl.delay.connect(fl.wet); fl.wet.connect(input);
+    // beat roll: a delay that is always listening; closing its input and feeding it back loops the last slice
+    X.rollIn = g(1); X.roll = ctx.createDelay(2.5); X.rollFb = g(0); X.rollOut = g(0);
+    tap.connect(X.rollIn); X.rollIn.connect(X.roll); X.roll.connect(X.rollFb); X.rollFb.connect(X.roll); X.roll.connect(X.rollOut); X.rollOut.connect(input);
+    // echo out
+    X.echoIn = g(0); X.echo = ctx.createDelay(2.5); X.echoFb = g(0);
+    tap.connect(X.echoIn); X.echoIn.connect(X.echo); X.echo.connect(X.echoFb); X.echoFb.connect(X.echo); X.echo.connect(input);
+    // reverb, with a short feedback loop in front of it that can hold a moment forever (freeze)
+    const ir = ctx.createBuffer(2, ctx.sampleRate * 3.2, ctx.sampleRate);
+    for (let c = 0; c < 2; c++) { const d = ir.getChannelData(c); for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 2.6); }
+    X.verb = ctx.createConvolver(); X.verb.buffer = ir; X.verbIn = g(0); X.verbWet = g(0.5);
+    X.fzIn = g(1); X.fz = ctx.createDelay(1); X.fz.delayTime.value = 0.31; X.fzFb = g(0); X.fzOut = g(0);
+    tap.connect(X.verbIn); X.verbIn.connect(X.verb); X.verb.connect(X.verbWet); X.verbWet.connect(input);
+    tap.connect(X.fzIn); X.fzIn.connect(X.fz); X.fz.connect(X.fzFb); X.fzFb.connect(X.fz); X.fz.connect(X.fzOut); X.fzOut.connect(X.verb);
+    // noise riser and spinback play their own sources into these
+    X.noise = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate); { const d = X.noise.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1; }
+    X.riseBp = bq('bandpass', 300, 1.2); X.riseG = g(0); X.riseBp.connect(X.riseG); X.riseG.connect(input);
+    X.spinG = g(1); X.spinG.connect(input);
+    X.crushKey = '';
+  }
+  const beatLen = () => (st.analysed ? st.period : 60 / NOMINAL_BPM);
+  const P2 = (prm, v, tc = 0.03) => prm.setTargetAtTime(v, ctx.currentTime, tc);
+  let fxOn = false, fxSel = 0, brakeTo = 1, brakeSecs = 0.5, rate = 1, fxTimer = 0;
+  // Each effect: name, four option labels (or none), default option, and how to switch it on / off.
+  // d = the DEPTH knob (0..1), o = the chosen option (0..3). on() is also called again when the knob or option moves.
+  const FXS = [
+    { n: 'Flanger', opts: ['SLOW', 'MED', 'FAST', 'JET'], o: 1,
+      on(d, o) { P2(fl.lfo.frequency, [0.1, 0.28, 1, 3.2][o]); P2(fl.wet.gain, 0.35 + d * 0.6); P2(fl.fb.gain, 0.3 + d * 0.5); },
+      off() { P2(fl.wet.gain, 0); P2(fl.fb.gain, 0); } },
+    { n: 'Filter', hint: 'knob: left low-pass, right high-pass',
+      on(d) { // one knob: left of centre closes the top, right of centre removes the bottom
+        const lpOn = d < 0.47, hpOn = d > 0.53;
+        P2(X.lp.frequency, lpOn ? 20000 * Math.pow(0.005, (0.47 - d) / 0.47) : 20000); P2(X.lp.Q, lpOn ? 4 : 0.7);
+        P2(X.hp.frequency, hpOn ? 20 * Math.pow(350, (d - 0.53) / 0.47) : 10); P2(X.hp.Q, hpOn ? 4 : 0.7);
+      },
+      off() { P2(X.lp.frequency, 20000); P2(X.hp.frequency, 10); P2(X.lp.Q, 0.7); P2(X.hp.Q, 0.7); } },
+    { n: 'Phaser', opts: ['1', '2', '4', '8'], o: 2, hint: 'beats per sweep',
+      on(d, o) { P2(X.phLfo.frequency, 1 / (beatLen() * [1, 2, 4, 8][o])); P2(X.phDepth.gain, 1400 + d * 2000); P2(X.phWet.gain, 0.5 + d * 0.5); },
+      off() { P2(X.phWet.gain, 0); } },
+    { n: 'Auto-wah', opts: ['1/4', '1/2', '1', '2'], o: 2, hint: 'beats per wah',
+      on(d, o) { P2(X.wahLfo.frequency, 1 / (beatLen() * [0.25, 0.5, 1, 2][o])); P2(X.wahDepth.gain, 600 + d * 1700); P2(X.wahWet.gain, 1.6); P2(X.wahDry.gain, 1 - d * 0.9); },
+      off() { P2(X.wahWet.gain, 0); P2(X.wahDry.gain, 1); } },
+    { n: 'Riser', opts: ['2', '4', '8', '16'], o: 2, hint: 'beats to the top', hold: true,
+      on(d, o, fresh) {
+        if (!fresh) return P2(X.riseG.gain, 0.1 + d * 0.5, 0.2);
+        const t = ctx.currentTime, len = beatLen() * [2, 4, 8, 16][o];
+        X.riseSrc = ctx.createBufferSource(); X.riseSrc.buffer = X.noise; X.riseSrc.loop = true; X.riseSrc.connect(X.riseBp); X.riseSrc.start();
+        X.riseBp.frequency.cancelScheduledValues(t); X.riseBp.frequency.setValueAtTime(250, t); X.riseBp.frequency.exponentialRampToValueAtTime(11000, t + len);
+        X.riseG.gain.cancelScheduledValues(t); X.riseG.gain.setValueAtTime(0.0001, t); X.riseG.gain.exponentialRampToValueAtTime(0.1 + d * 0.5, t + len);
+      },
+      off() { const t = ctx.currentTime; X.riseG.gain.cancelScheduledValues(t); X.riseG.gain.setTargetAtTime(0, t, 0.01); if (X.riseSrc) { X.riseSrc.stop(t + 0.1); X.riseSrc = null; } } },
+    { n: 'Roll', opts: ['1/16', '1/8', '1/4', '1/2'], o: 1, hint: 'slice length', hold: true,
+      on(d, o) { X.roll.delayTime.setValueAtTime(Math.min(2.4, beatLen() * [0.25, 0.5, 1, 2][o]), ctx.currentTime); P2(X.rollIn.gain, 0, 0.003); P2(X.rollFb.gain, 1, 0.003); P2(X.rollOut.gain, 1, 0.003); P2(X.cut.gain, 0, 0.003); },
+      off() { P2(X.rollFb.gain, 0, 0.005); P2(X.rollOut.gain, 0, 0.005); P2(X.rollIn.gain, 1, 0.02); P2(X.cut.gain, 1, 0.005); } },
+    { n: 'Gater', opts: ['1/16', '1/8', '1/4', 'PAT'], o: 3, hint: 'chop rate', on() {}, off() { X.gate.gain.cancelScheduledValues(ctx.currentTime); P2(X.gate.gain, 1, 0.01); } },
+    { n: 'Brake', opts: ['1/2', '1', '2', '4'], o: 1, hint: 'beats to stop', hold: true,
+      on(d, o) { brakeTo = 0; brakeSecs = beatLen() * [0.5, 1, 2, 4][o]; },
+      off() { brakeTo = 1; if (st.want && audio.paused) audio.play().catch(() => {}); } },
+    { n: 'Spinback', opts: ['1', '2', '4', '8'], o: 1, hint: 'beats rewound', hold: true,
+      on(d, o, fresh) { // the last few beats play backwards and speed up, then the track slams back in
+        if (!fresh || !trackBuf) return;
+        const sr = trackBuf.sampleRate, n = Math.round(beatLen() * [1, 2, 4, 8][o] * sr), end = Math.round(audio.currentTime * sr), buf = ctx.createBuffer(trackBuf.numberOfChannels, n, sr);
+        for (let c = 0; c < buf.numberOfChannels; c++) { const s = trackBuf.getChannelData(c), dd = buf.getChannelData(c); for (let i = 0; i < n; i++) dd[i] = s[end - 1 - i] || 0; }
+        const t = ctx.currentTime, dur = n / sr / 1.9, src = ctx.createBufferSource(); src.buffer = buf; src.connect(X.spinG);
+        src.playbackRate.setValueAtTime(0.8, t); src.playbackRate.linearRampToValueAtTime(3, t + dur); src.start(t);
+        X.spin = src; P2(X.cut.gain, 0, 0.004);
+        fxTimer = setTimeout(() => { if (FXS[fxSel].n === 'Spinback' && fxOn) setFx(false); }, dur * 1000);
+      },
+      off() { clearTimeout(fxTimer); if (X.spin) { try { X.spin.stop(); } catch (e) {} X.spin = null; } P2(X.cut.gain, 1, 0.004); } },
+    { n: 'Reverb', opts: ['ROOM', 'HALL', 'HUGE', 'FRZ'], o: 1, hint: 'FRZ holds the moment',
+      on(d, o) {
+        const frz = o === 3;
+        P2(X.verbIn.gain, frz ? 0 : [0.25, 0.55, 1][o] * (0.3 + d * 0.7)); P2(X.fzOut.gain, frz ? 1 : o === 2 ? 0.6 : 0); P2(X.fzFb.gain, frz ? 1 : o === 2 ? 0.55 : 0, 0.005);
+        P2(X.fzIn.gain, frz ? 0 : 1, 0.005); P2(X.cut.gain, frz ? 0 : 1, 0.05);
+      },
+      off() { P2(X.verbIn.gain, 0); P2(X.fzFb.gain, 0); P2(X.fzOut.gain, 0); P2(X.fzIn.gain, 1); P2(X.cut.gain, 1, 0.05); } },
+    { n: 'Echo out', opts: ['1/4', '1/2', '3/4', '1'], o: 2, hint: 'echo spacing', hold: true,
+      on(d, o, fresh) {
+        const dt = Math.min(2.4, beatLen() * [0.25, 0.5, 0.75, 1][o]), t = ctx.currentTime;
+        P2(X.echoFb.gain, 0.45 + d * 0.4);
+        if (!fresh) return;
+        X.echo.delayTime.setValueAtTime(dt, t); X.echoIn.gain.cancelScheduledValues(t); X.echoIn.gain.setValueAtTime(1, t); X.echoIn.gain.setTargetAtTime(0, t + dt, 0.01); // let one echo-length of the track in, then shut the door
+        P2(X.cut.gain, 0, 0.01);
+      },
+      off() { P2(X.cut.gain, 1, 0.01); P2(X.echoFb.gain, 0.3, 0.3); P2(X.echoIn.gain, 0); } },
+    { n: 'Crush', hint: 'knob: bit depth',
+      on(d) { const bits = 9 - d * 7, key = bits.toFixed(1); if (key !== X.crushKey) { X.crushKey = key; X.crush.curve = curve(0, bits); } },
+      off() { X.crushKey = ''; X.crush.curve = null; } },
+    { n: 'Pump', opts: ['1/2', '1', '2', 'OFF'], o: 1, hint: 'duck every N beats, or off-beat', on() {}, off() { X.pump.gain.cancelScheduledValues(ctx.currentTime); P2(X.pump.gain, 1, 0.02); } }
+  ];
+  const GATE_PAT = [1, 0, 1, 1, 0, 1, 1, 0, 1, 0, 1, 1, 0, 1, 0, 1];
+  let fxNext = -1e9;
+  setInterval(() => { // gater and pump are written onto the beat grid a little ahead of time
+    if (!ctx || !fxOn) return;
+    const fx = FXS[fxSel]; if (fx.n !== 'Gater' && fx.n !== 'Pump') return;
+    const [q, stepDur] = seqPos(), d = MXK.fx;
+    if (fxNext < q - 1 || fxNext > q + 8) fxNext = Math.ceil(q);
+    while (fxNext < q + 0.12 / stepDur) {
+      const t = ctx.currentTime + Math.max(0, (fxNext - q) * stepDur), i = ((fxNext % 16) + 16) % 16, low = 1 - (0.5 + d * 0.5);
+      if (fx.n === 'Gater') {
+        if (fx.o === 0) { X.gate.gain.setTargetAtTime(1, t, 0.003); X.gate.gain.setTargetAtTime(low, t + stepDur * 0.5, 0.003); }
+        else X.gate.gain.setTargetAtTime((fx.o === 1 ? i % 2 === 0 : fx.o === 2 ? i % 4 < 2 : GATE_PAT[i]) ? 1 : low, t, 0.004);
+      } else {
+        const every = [2, 4, 8, 4][fx.o], hit = fx.o === 3 ? i % 4 === 2 : i % every === 0;
+        if (hit) { X.pump.gain.setTargetAtTime(1 - (0.35 + d * 0.6), t, 0.008); X.pump.gain.setTargetAtTime(1, t + 0.04, stepDur * every * 0.22); }
+      }
+      fxNext++;
+    }
+  }, 25);
+  function fxApply(fresh) { if (ctx) { const fx = FXS[fxSel]; if (fxOn) fx.on(MXK.fx, fx.o || 0, !!fresh); } paintFx(); }
+  function setFx(on) {
+    if (on === fxOn) return;
+    fxOn = on; fxNext = -1e9;
+    if (ctx) { if (on) FXS[fxSel].on(MXK.fx, FXS[fxSel].o || 0, true); else FXS[fxSel].off(); }
+    paintFx();
+  }
+  function paintFx() {
+    const fx = FXS[fxSel], b = $('#mxFx');
+    $('#mxName').textContent = fx.n;
+    b.classList.toggle('on', fxOn); b.setAttribute('aria-pressed', fxOn); b.textContent = fx.hold ? (fxOn ? 'Release' : 'Fire') : fxOn ? 'On' : 'Off';
+    [...$('#mxOpts').children].forEach((o, i) => { o.textContent = fx.opts ? fx.opts[i] : '·'; o.disabled = !fx.opts; o.classList.toggle('on', !!fx.opts && i === fx.o); });
+    $('#mxOpts').title = fx.hint || '';
+  }
+  function fxStep(dir) { setFx(false); fxSel = (fxSel + dir + FXS.length) % FXS.length; paintFx(); }
+  $('#mxPrev').addEventListener('click', () => fxStep(-1));
+  $('#mxNext').addEventListener('click', () => fxStep(1));
+  [...$('#mxOpts').children].forEach((o, i) => o.addEventListener('click', () => { FXS[fxSel].o = i; fxApply(); }));
+  $('#mxFx').addEventListener('click', () => setFx(!fxOn));
   bindKnobs('.knob.mk', 'm', MXK, applyMixer);
-  $('#mxFx').addEventListener('click', e => { fxOn = !fxOn; e.currentTarget.classList.toggle('on', fxOn); e.currentTarget.setAttribute('aria-pressed', fxOn); applyMixer(); });
+  paintFx();
 
   /* ---------- Acid bass line: one oscillator, a resonant low-pass with its own envelope, a 16-step sequencer ---------- */
   // Each step is a pitch (semitones from C2), or a rest, with ACCENT (louder, brighter, snappier) and SLIDE (glide into
@@ -616,6 +766,11 @@
   function frame(now) {
     requestAnimationFrame(frame);
     const dt = Math.min((now - lastT) / 1000, 0.5); lastT = now;
+    // BRAKE: the track winds down to a stop like a turntable losing power, and spins back up on release
+    if (rate !== brakeTo && audio.src) {
+      rate = brakeTo < rate ? Math.max(0, rate - dt / brakeSecs) : Math.min(1, rate + dt / (brakeSecs * 0.4));
+      if (rate < 0.07) { if (!audio.paused) audio.pause(); } else { audio.playbackRate = rate; if (st.want && audio.paused) audio.play().catch(() => {}); }
+    }
     // beat clock: locked to the measured grid once known, free-running before that
     if (st.analysed && audio.duration) {
       if (audio.currentTime < lastCT - 1) wraps++; // looped
