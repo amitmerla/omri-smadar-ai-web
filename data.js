@@ -2,7 +2,7 @@
 // The AI agent layers live web data on top of this at runtime (see agent.js).
 window.OMRI = {
   // The deck plays this file when it exists; until then deck.js generates a stand-in groove.
-  track: { src: 'audio/track.mp3', title: 'Omri Smadar' },
+  track: { src: 'audio/track.mp3', title: 'Lose Your Soul · Omri Smadar & Jenia Tarsol feat. Nona Choir' },
 
   events: [
     { date: '2026-11-12', title: 'Omri Smadar Live', venue: 'Barby', city: 'Tel Aviv', status: 'soldout', url: 'https://barby.co.il/show/5503' },

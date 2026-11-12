@@ -67,12 +67,27 @@
         <button id="deckLock" class="deck-lock" aria-pressed="false" title="Lock the current scenario or let them cycle">Auto</button>
       </div>
       </div>
-      <div class="rig" id="rig" role="group" aria-label="Delay pedal">
+      <div class="rig" id="rig" role="group" aria-label="Sound rig">
         <div class="tp">
           <button id="tpPlay" aria-pressed="false" aria-label="Start or stop the track"></button>
           <span class="tp-title" id="ttTitle">Track</span>
-          <span class="tp-bpm"><b id="mxBpm">---.-</b> BPM <em id="mxInfo"></em></span>
-          <input type="range" class="mx-vol" id="mxVol" min="0" max="100" value="85" aria-label="Volume">
+        </div>
+        <div class="rig-row">
+        <div class="mx">
+          <div class="mx-lcd"><b id="mxBpm">---.-</b><span>BPM</span><em id="mxInfo">press start</em></div>
+          <div class="mx-eq">
+            <div class="mx-knobs">
+              <div class="mx-k"><div class="knob mk" data-m="hi" role="slider" tabindex="0" aria-label="Treble" aria-valuemin="0" aria-valuemax="100"><i></i></div><label>HI</label></div>
+              <div class="mx-k"><div class="knob mk" data-m="mid" role="slider" tabindex="0" aria-label="Mid" aria-valuemin="0" aria-valuemax="100"><i></i></div><label>MID</label></div>
+              <div class="mx-k"><div class="knob mk" data-m="low" role="slider" tabindex="0" aria-label="Bass" aria-valuemin="0" aria-valuemax="100"><i></i></div><label>LOW</label></div>
+            </div>
+            <div class="mx-meter" id="mxMeter" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+          </div>
+          <div class="mx-fx">
+            <button id="mxFx" aria-pressed="false">Flanger</button>
+            <div class="mx-k"><div class="knob mk small" data-m="fx" role="slider" tabindex="0" aria-label="Flanger depth" aria-valuemin="0" aria-valuemax="100"><i></i></div><label>DEPTH</label></div>
+          </div>
+          <input type="range" class="mx-vol" id="mxVol" min="0" max="100" value="85" aria-label="Master volume">
         </div>
         <div class="pd">
           <div class="pd-top"><span class="pd-logo">OMRI<b>6</b></span><span class="pd-name"><b>OS4</b> MkII</span></div>
@@ -96,7 +111,34 @@
             <div class="fs"><b>TAP</b><button id="fsTAP" aria-label="Footswitch TAP"></button><span>½ / ←</span></div>
           </div>
         </div>
+        </div>
         <p class="rig-note" id="pdRead"></p>
+        <div class="td" id="td">
+          <div class="td-head">
+            <span class="td-brand"><b>OS-3-MO</b> Analog Bass Line Synthesizer</span>
+            <span class="td-wave" role="group" aria-label="Waveform"><button id="tdSaw" class="on" aria-label="Sawtooth">◿</button><button id="tdSqr" aria-label="Square">⊓</button></span>
+          </div>
+          <div class="td-row big">
+            <div class="td-k"><div class="knob sk" data-s="tune" role="slider" tabindex="0" aria-label="Tuning" aria-valuemin="0" aria-valuemax="100"><i></i></div><label>Tuning</label></div><div class="td-k"><div class="knob sk" data-s="cutoff" role="slider" tabindex="0" aria-label="Cutoff" aria-valuemin="0" aria-valuemax="100"><i></i></div><label>Cutoff</label></div><div class="td-k"><div class="knob sk" data-s="reso" role="slider" tabindex="0" aria-label="Resonance" aria-valuemin="0" aria-valuemax="100"><i></i></div><label>Resonance</label></div><div class="td-k"><div class="knob sk" data-s="env" role="slider" tabindex="0" aria-label="Env Mod" aria-valuemin="0" aria-valuemax="100"><i></i></div><label>Env Mod</label></div><div class="td-k"><div class="knob sk" data-s="decay" role="slider" tabindex="0" aria-label="Decay" aria-valuemin="0" aria-valuemax="100"><i></i></div><label>Decay</label></div><div class="td-k"><div class="knob sk" data-s="accent" role="slider" tabindex="0" aria-label="Accent" aria-valuemin="0" aria-valuemax="100"><i></i></div><label>Accent</label></div>
+          </div>
+          <div class="td-row mo">
+            <span class="td-tag">MO</span>
+            <div class="td-k s"><div class="knob sk" data-s="sub" role="slider" tabindex="0" aria-label="Sub Osc" aria-valuemin="0" aria-valuemax="100"><i></i></div><label>Sub Osc</label></div><div class="td-k s"><div class="knob sk" data-s="slide" role="slider" tabindex="0" aria-label="Slide Time" aria-valuemin="0" aria-valuemax="100"><i></i></div><label>Slide Time</label></div><div class="td-k s"><div class="knob sk" data-s="attack" role="slider" tabindex="0" aria-label="Soft Attack" aria-valuemin="0" aria-valuemax="100"><i></i></div><label>Soft Attack</label></div><div class="td-k s"><div class="knob sk" data-s="adecay" role="slider" tabindex="0" aria-label="Accent Decay" aria-valuemin="0" aria-valuemax="100"><i></i></div><label>Accent Decay</label></div><div class="td-k s"><div class="knob sk" data-s="fm" role="slider" tabindex="0" aria-label="Filter FM" aria-valuemin="0" aria-valuemax="100"><i></i></div><label>Filter FM</label></div><div class="td-k s"><div class="knob sk" data-s="muff" role="slider" tabindex="0" aria-label="Muffler" aria-valuemin="0" aria-valuemax="100"><i></i></div><label>Muffler</label></div><div class="td-k s"><div class="knob sk" data-s="drive" role="slider" tabindex="0" aria-label="Overdrive" aria-valuemin="0" aria-valuemax="100"><i></i></div><label>Overdrive</label></div><div class="td-k s"><div class="knob sk" data-s="vol" role="slider" tabindex="0" aria-label="Volume" aria-valuemin="0" aria-valuemax="100"><i></i></div><label>Volume</label></div>
+          </div>
+          <div class="td-steps" id="tdSteps" role="group" aria-label="Sequencer steps"></div>
+          <div class="td-ctl">
+            <div class="td-btns">
+              <button id="tdRun" class="run" aria-pressed="false">Run<br>Stop</button>
+              <button class="pt on" data-p="0">1</button><button class="pt" data-p="1">2</button><button class="pt" data-p="2">3</button><button class="pt" data-p="3">4</button>
+              <button id="tdRnd" title="Random pattern">Rnd</button><button id="tdClr" title="Clear pattern">Clr</button>
+            </div>
+            <div class="td-keys" id="tdKeys" role="group" aria-label="Note for the selected step"><button class="wk" data-n="0">C</button><button class="bk" data-n="1">C#</button><button class="wk" data-n="2">D</button><button class="bk" data-n="3">D#</button><button class="wk" data-n="4">E</button><button class="wk" data-n="5">F</button><button class="bk" data-n="6">F#</button><button class="wk" data-n="7">G</button><button class="bk" data-n="8">G#</button><button class="wk" data-n="9">A</button><button class="bk" data-n="10">A#</button><button class="wk" data-n="11">B</button><button class="wk" data-n="12">C</button></div>
+            <div class="td-btns">
+              <button id="tdDown" class="tg">Down</button><button id="tdUp" class="tg">Up</button><button id="tdAcc" class="tg">Accent</button><button id="tdSlide" class="tg">Slide</button><button id="tdRest" class="tg">Rest</button>
+            </div>
+          </div>
+          <p class="td-read" id="tdRead"></p>
+        </div>
       </div>
     </div>
     <p class="hero-sub reveal">Interplanetary Affair. From a kibbutz on the Mediterranean to sunrise at Masada.</p>

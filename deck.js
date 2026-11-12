@@ -1,4 +1,5 @@
-// The sound rig: a transport strip and a stereo delay-modeller pedal with a looper.
+// The sound rig: a mixer channel (EQ, flanger), a stereo delay-modeller pedal with a looper, and an acid bass line synth.
+// Signal path: track + synth -> mixer EQ -> flanger -> pedal -> master.
 // The track runs through Web Audio, so every control here really changes what you hear, and the BPM is measured.
 // Source: audio/track.mp3 if it exists (see data.js). Until then a groove generated here in the browser stands in.
 // It is not Omri's music, and the transport strip says so.
@@ -10,7 +11,9 @@
   audio.crossOrigin = 'anonymous'; audio.loop = true; audio.preload = 'auto';
 
   const st = { want: false, period: 0, phase: 0, analysed: false };
-  let ctx = null, analyser = null, inAn = null, master = null, input = null, out = null, P = null;
+  let ctx = null, analyser = null, inAn = null, master = null, pre = null, input = null, out = null, P = null, SY = null;
+  const eq = {}, fl = {};
+  let outLevel = 0;
   let beatPos = 0, wraps = 0, lastCT = 0, lastT = performance.now(), inLevel = 0;
   const freq = new Uint8Array(1024), wave = new Uint8Array(2048), inWave = new Uint8Array(512);
 
@@ -81,8 +84,18 @@
     const limiter = ctx.createDynamicsCompressor(); limiter.threshold.value = -3; limiter.ratio.value = 20; limiter.attack.value = 0.002; // runaway repeats stay safe
     analyser = ctx.createAnalyser(); analyser.fftSize = 2048; analyser.smoothingTimeConstant = 0.72;
     inAn = ctx.createAnalyser(); inAn.fftSize = 512;
-    src.connect(input); input.connect(inAn);
-    buildPedal();
+    // mixer channel: three-band EQ, then a flanger (a very short delay swept by a slow LFO and fed back into itself)
+    pre = ctx.createGain();
+    const shelf = (type, f) => { const n = ctx.createBiquadFilter(); n.type = type; n.frequency.value = f; return n; };
+    eq.low = shelf('lowshelf', 220); eq.mid = shelf('peaking', 1000); eq.mid.Q.value = 0.7; eq.hi = shelf('highshelf', 3600);
+    fl.delay = ctx.createDelay(0.05); fl.delay.delayTime.value = 0.004;
+    fl.wet = ctx.createGain(); fl.wet.gain.value = 0; fl.fb = ctx.createGain(); fl.fb.gain.value = 0;
+    fl.lfo = ctx.createOscillator(); fl.lfo.frequency.value = 0.28; fl.depth = ctx.createGain(); fl.depth.gain.value = 0.0028;
+    fl.lfo.connect(fl.depth); fl.depth.connect(fl.delay.delayTime); fl.lfo.start();
+    src.connect(pre); pre.connect(eq.low); eq.low.connect(eq.mid); eq.mid.connect(eq.hi);
+    eq.hi.connect(input); eq.hi.connect(fl.delay); fl.delay.connect(fl.fb); fl.fb.connect(fl.delay); fl.delay.connect(fl.wet); fl.wet.connect(input);
+    input.connect(inAn);
+    buildPedal(); buildSynth(); applyMixer();
     out.connect(master); master.connect(limiter); limiter.connect(analyser); analyser.connect(ctx.destination);
     apply();
   }
@@ -147,6 +160,170 @@
       info.textContent = 'no bpm';
     }
   }
+
+  /* ---------- Knob helper shared by the mixer and the synth ---------- */
+  function bindKnobs(sel, attr, vals, onChange) {
+    const paintAll = () => document.querySelectorAll(sel).forEach(kn => { kn.style.setProperty('--r', -150 + vals[kn.dataset[attr]] * 300 + 'deg'); kn.setAttribute('aria-valuenow', Math.round(vals[kn.dataset[attr]] * 100)); });
+    document.querySelectorAll(sel).forEach(kn => {
+      const key = kn.dataset[attr], def = vals[key];
+      let y0 = 0, v0 = 0;
+      const setv = v => { vals[key] = Math.min(1, Math.max(0, v)); paintAll(); onChange(key); };
+      const move = e => setv(v0 + (y0 - e.clientY) / 130);
+      kn.addEventListener('pointerdown', e => {
+        e.preventDefault(); y0 = e.clientY; v0 = vals[key]; kn.setPointerCapture(e.pointerId);
+        kn.addEventListener('pointermove', move);
+        kn.addEventListener('pointerup', () => kn.removeEventListener('pointermove', move), { once: true });
+      });
+      kn.addEventListener('dblclick', () => setv(def));
+      kn.addEventListener('keydown', e => {
+        const d = e.key === 'ArrowUp' || e.key === 'ArrowRight' ? 0.05 : e.key === 'ArrowDown' || e.key === 'ArrowLeft' ? -0.05 : 0;
+        if (d) { e.preventDefault(); setv(vals[key] + d); }
+      });
+    });
+    paintAll();
+  }
+
+  /* ---------- Mixer channel ---------- */
+  const MXK = { hi: 0.5, mid: 0.5, low: 0.5, fx: 0.6 };
+  let fxOn = false;
+  const eqDb = v => (v < 0.5 ? -26 * (1 - v * 2) : 6 * (v * 2 - 1)); // full kill at the bottom, +6 dB at the top
+  function applyMixer() {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    eq.hi.gain.setTargetAtTime(eqDb(MXK.hi), t, 0.02); eq.mid.gain.setTargetAtTime(eqDb(MXK.mid), t, 0.02); eq.low.gain.setTargetAtTime(eqDb(MXK.low), t, 0.02);
+    fl.wet.gain.setTargetAtTime(fxOn ? 0.35 + MXK.fx * 0.6 : 0, t, 0.03);
+    fl.fb.gain.setTargetAtTime(fxOn ? 0.3 + MXK.fx * 0.5 : 0, t, 0.03);
+  }
+  bindKnobs('.knob.mk', 'm', MXK, applyMixer);
+  $('#mxFx').addEventListener('click', e => { fxOn = !fxOn; e.currentTarget.classList.toggle('on', fxOn); e.currentTarget.setAttribute('aria-pressed', fxOn); applyMixer(); });
+
+  /* ---------- Acid bass line: one oscillator, a resonant low-pass with its own envelope, a 16-step sequencer ---------- */
+  // Each step is a pitch (semitones from C2), or a rest, with ACCENT (louder, brighter, snappier) and SLIDE (glide into
+  // the next note without re-triggering). The sequencer runs on the track's measured beat grid, so it stays in time.
+  const SK = { tune: 0.5, cutoff: 0.38, reso: 0.75, env: 0.6, decay: 0.35, accent: 0.7, sub: 0, slide: 0.3, attack: 0, adecay: 0.3, fm: 0, muff: 0, drive: 0.35, vol: 0.6 };
+  const NOTE = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+  const parse = str => str.split(' ').map(tok => {
+    const m = tok.match(/^([A-G]#?)(\d)(a?)(s?)$/);
+    return m ? { p: NOTE.indexOf(m[1]) + (m[2] - 2) * 12, a: !!m[3], s: !!m[4], r: false } : { p: 9, a: false, s: false, r: true };
+  });
+  const PATTERNS = [ // in A minor, to sit on the demo groove
+    'A1 A1 A2 . A1 C2s A1a G1 A1 A1 E2a . A1 G1s A1 A2a',
+    'A1a . A1 A2s A1 . G2a A1 . A1 C2 A1s A2a . E2 G1',
+    'A1 A2 A1 A2a C2 A2 A1 E2a A1 A2 G1 G2a A1 A2 C3as A2',
+    'A1a . . A1 . A1s C2 . A1a . . G1 . G1s A1 .'
+  ].map(parse);
+  const SQ = { run: false, pat: 0, sel: 0, wave: 'sawtooth', next: -1, q0: 0, t0: 0, shown: [], gateOpen: false };
+  const pat = () => PATTERNS[SQ.pat];
+
+  function buildSynth() {
+    const g = v => { const n = ctx.createGain(); n.gain.value = v; return n; };
+    SY = { osc: ctx.createOscillator(), sub: ctx.createOscillator(), oscG: g(0.5), subG: g(0), f1: ctx.createBiquadFilter(), f2: ctx.createBiquadFilter(), fm: g(0),
+      vca: g(0), drive: ctx.createWaveShaper(), muff: ctx.createBiquadFilter(), vol: g(0.5), key: '' };
+    SY.sub.type = 'square'; SY.f1.type = SY.f2.type = SY.muff.type = 'lowpass';
+    SY.osc.connect(SY.oscG); SY.sub.connect(SY.subG); SY.oscG.connect(SY.f1); SY.subG.connect(SY.f1);
+    SY.f1.connect(SY.f2); SY.f2.connect(SY.vca); SY.vca.connect(SY.drive); SY.drive.connect(SY.muff); SY.muff.connect(SY.vol); SY.vol.connect(pre);
+    SY.osc.connect(SY.fm); SY.fm.connect(SY.f1.detune); SY.fm.connect(SY.f2.detune); // filter FM: the oscillator wobbles the cutoff at audio rate
+    SY.osc.start(); SY.sub.start(); applySynth();
+  }
+  const cutHz = () => 70 * Math.pow(2, SK.cutoff * 6.6);
+  function applySynth() {
+    if (!SY) return;
+    const t = ctx.currentTime, set = (prm, v) => prm.setTargetAtTime(v, t, 0.02);
+    SY.osc.type = SQ.wave;
+    set(SY.f1.Q, 0.7 + SK.reso * 17); set(SY.f2.Q, 0.7 + SK.reso * 3);
+    if (!SQ.gateOpen) { set(SY.f1.frequency, cutHz()); set(SY.f2.frequency, cutHz()); }
+    set(SY.subG.gain, SK.sub * 0.6); set(SY.fm.gain, SK.fm * 2400);
+    set(SY.muff.frequency, 16000 * Math.pow(0.07, SK.muff)); set(SY.vol.gain, SK.vol * 0.9);
+    const key = SK.drive.toFixed(2);
+    if (key !== SY.key) { SY.key = key; SY.drive.curve = curve(SK.drive * 1.6, 0); }
+  }
+  const hz = p => 65.41 * Math.pow(2, (p + (SK.tune - 0.5) * 14) / 12);
+  function playStep(i, t, dur) {
+    const s = pat()[i], prev = pat()[(i + 15) % 16], slid = prev.s && !prev.r && SQ.gateOpen;
+    if (s.r) { if (SQ.gateOpen) { SY.vca.gain.setTargetAtTime(0, t, 0.01); SQ.gateOpen = false; } return; }
+    const f = hz(s.p), glide = 0.02 + SK.slide * 0.28;
+    [[SY.osc, f], [SY.sub, f / 2]].forEach(([o, v]) => (slid ? o.frequency.setTargetAtTime(v, t, glide / 3) : o.frequency.setValueAtTime(v, t)));
+    if (!slid) { // new note: the filter envelope snaps open and falls back; accents open further and fall faster
+      const base = cutHz(), peak = Math.min(17000, base * Math.pow(2, SK.env * 4 + (s.a ? SK.accent * 1.6 : 0)));
+      const fall = s.a ? 0.05 + SK.adecay * 0.45 : 0.08 + SK.decay * 1.5;
+      [SY.f1, SY.f2].forEach(fl2 => { fl2.frequency.cancelScheduledValues(t); fl2.frequency.setValueAtTime(peak, t); fl2.frequency.setTargetAtTime(base, t, fall / 3); });
+    }
+    SY.vca.gain.cancelScheduledValues(t);
+    SY.vca.gain.setTargetAtTime(s.a ? 0.55 + SK.accent * 0.45 : 0.55, t, 0.002 + SK.attack * 0.05);
+    SQ.gateOpen = true;
+    const nxt = pat()[(i + 1) % 16];
+    if (!s.s || nxt.r) { SY.vca.gain.setTargetAtTime(0, t + dur * (s.s ? 1 : 0.55), 0.012); SQ.gateOpen = false; }
+  }
+  // sequencer clock in sixteenths: the track's beat grid while it plays, otherwise its own clock at the same tempo
+  function seqPos() {
+    const stepDur = (st.analysed ? st.period : 60 / NOMINAL_BPM) / 4;
+    if (st.want && st.analysed && audio.duration && !audio.paused) { SQ.q0 = beatPos16(); SQ.t0 = ctx.currentTime; return [SQ.q0, stepDur]; }
+    return [SQ.q0 + (ctx.currentTime - SQ.t0) / stepDur, stepDur];
+  }
+  const beatPos16 = () => ((audio.currentTime - st.phase + wraps * audio.duration) / st.period) * 4;
+  setInterval(() => {
+    if (!SQ.run || !ctx) return;
+    const [q, stepDur] = seqPos();
+    if (SQ.next < q - 1 || SQ.next > q + 8) SQ.next = Math.ceil(q); // (re)join the grid
+    while (SQ.next < q + 0.12 / stepDur) { // schedule a little ahead so timing is sample-accurate
+      const t = ctx.currentTime + Math.max(0, (SQ.next - q) * stepDur), i = ((SQ.next % 16) + 16) % 16;
+      playStep(i, t, stepDur); SQ.shown.push([t, i]); SQ.next++;
+    }
+  }, 25);
+
+  const NAMES = { tune: 'tuning', cutoff: 'cutoff', reso: 'resonance', env: 'env mod', decay: 'decay', accent: 'accent', sub: 'sub osc', slide: 'slide time', attack: 'soft attack', adecay: 'accent decay', fm: 'filter FM', muff: 'muffler', drive: 'overdrive', vol: 'volume' };
+  const pname = s => NOTE[((s.p % 12) + 12) % 12] + (Math.floor(s.p / 12) + 2);
+  let nowStep = -1;
+  function paintSynth(msg) {
+    const steps = $('#tdSteps').children, cur = pat()[SQ.sel];
+    pat().forEach((s, i) => {
+      const b = steps[i]; b.textContent = s.r ? '·' : pname(s);
+      b.className = (s.r ? 'rest ' : '') + (s.a && !s.r ? 'acc ' : '') + (s.s && !s.r ? 'sld ' : '') + (i === SQ.sel ? 'sel ' : '') + (i === nowStep ? 'now' : '');
+    });
+    document.querySelectorAll('#tdKeys button').forEach(k => k.classList.toggle('on', !cur.r && +k.dataset.n === (cur.p === 12 ? 12 : ((cur.p % 12) + 12) % 12)));
+    $('#tdDown').classList.toggle('on', !cur.r && cur.p < 0); $('#tdUp').classList.toggle('on', !cur.r && cur.p > 12);
+    $('#tdAcc').classList.toggle('on', cur.a); $('#tdSlide').classList.toggle('on', cur.s); $('#tdRest').classList.toggle('on', cur.r);
+    document.querySelectorAll('#td .pt').forEach(b => b.classList.toggle('on', +b.dataset.p === SQ.pat));
+    $('#tdRun').setAttribute('aria-pressed', SQ.run);
+    $('#tdSaw').classList.toggle('on', SQ.wave === 'sawtooth'); $('#tdSqr').classList.toggle('on', SQ.wave === 'square');
+    $('#tdRead').textContent = msg || `PATTERN ${SQ.pat + 1} · STEP ${SQ.sel + 1} · ${cur.r ? 'rest' : pname(cur)}${cur.a ? ' · accent' : ''}${cur.s ? ' · slide' : ''}${SQ.run ? '' : ' · press RUN'}`;
+  }
+  $('#tdSteps').innerHTML = Array.from({ length: 16 }, (_, i) => `<button aria-label="Step ${i + 1}"></button>`).join('');
+  [...$('#tdSteps').children].forEach((b, i) => b.addEventListener('click', () => { SQ.sel = i; paintSynth(); }));
+  function audition(s) { // hear a note while the sequencer is stopped
+    if (!ctx || SQ.run || s.r) return;
+    const t = ctx.currentTime; SQ.gateOpen = false; playStep(SQ.sel, t, 0.25); SY.vca.gain.setTargetAtTime(0, t + 0.22, 0.02); SQ.gateOpen = false;
+  }
+  $('#tdKeys').addEventListener('click', e => { // a key writes the note into the selected step and moves on, like step-writing on the real thing
+    const k = e.target.closest('button'); if (!k) return;
+    const s = pat()[SQ.sel], n = +k.dataset.n, oct = s.r || s.p === 12 ? 0 : Math.floor(s.p / 12); // keep the step's octave
+    s.r = false; s.p = n === 12 ? 12 : n + oct * 12;
+    audition(s); SQ.sel = (SQ.sel + 1) % 16; paintSynth();
+  });
+  const edit = fn => () => { const s = pat()[SQ.sel]; fn(s); audition(s); paintSynth(); };
+  $('#tdDown').addEventListener('click', edit(s => { if (!s.r) s.p = Math.max(-12, s.p - 12); }));
+  $('#tdUp').addEventListener('click', edit(s => { if (!s.r) s.p = Math.min(24, s.p + 12); }));
+  $('#tdAcc').addEventListener('click', edit(s => { s.a = !s.a; }));
+  $('#tdSlide').addEventListener('click', edit(s => { s.s = !s.s; }));
+  $('#tdRest').addEventListener('click', edit(s => { s.r = !s.r; }));
+  document.querySelectorAll('#td .pt').forEach(b => b.addEventListener('click', () => { SQ.pat = +b.dataset.p; paintSynth(); }));
+  $('#tdRnd').addEventListener('click', () => { // random acid line in A minor pentatonic
+    const scale = [-3, 0, 2, 4, 7, 9, 12, 14, 16, 19];
+    PATTERNS[SQ.pat] = Array.from({ length: 16 }, (_, i) => ({ p: Math.random() < 0.45 ? -3 : scale[Math.floor(Math.random() * scale.length)], a: Math.random() < 0.28, s: Math.random() < 0.25, r: i % 4 !== 0 && Math.random() < 0.18 }));
+    paintSynth();
+  });
+  $('#tdClr').addEventListener('click', () => { PATTERNS[SQ.pat] = Array.from({ length: 16 }, () => ({ p: -3, a: false, s: false, r: true })); SQ.sel = 0; paintSynth(); });
+  $('#tdRun').addEventListener('click', () => {
+    if (!ctx) return start().then(() => $('#tdRun').click());
+    SQ.run = !SQ.run; SQ.next = -1e9;
+    if (SQ.run) { const [q] = seqPos(); SQ.q0 = q; SQ.t0 = ctx.currentTime; }
+    else { SY.vca.gain.cancelScheduledValues(ctx.currentTime); SY.vca.gain.setTargetAtTime(0, ctx.currentTime, 0.02); SQ.gateOpen = false; SQ.shown = []; nowStep = -1; }
+    paintSynth();
+  });
+  $('#tdSaw').addEventListener('click', () => { SQ.wave = 'sawtooth'; applySynth(); paintSynth(); });
+  $('#tdSqr').addEventListener('click', () => { SQ.wave = 'square'; applySynth(); paintSynth(); });
+  bindKnobs('.knob.sk', 's', SK, key => { applySynth(); paintSynth(`${NAMES[key].toUpperCase()} ${Math.round(SK[key] * 100)}`); });
+  paintSynth();
 
   /* ---------- The pedal: one stereo delay engine, voiced 30 ways ---------- */
   // Two delay lines (A and B). Each line's repeats pass through a high-pass, a low-pass and a saturator/bit-crusher,
@@ -435,7 +612,7 @@
   paint();
 
   /* ---------- Per-frame: beat clock, ducking and swell, tempo light ---------- */
-  const bpmEl = $('#mxBpm'), tapEl = $('#fsTAP');
+  const bpmEl = $('#mxBpm'), tapEl = $('#fsTAP'), leds = [...document.querySelectorAll('#mxMeter i')];
   function frame(now) {
     requestAnimationFrame(frame);
     const dt = Math.min((now - lastT) / 1000, 0.5); lastT = now;
@@ -448,6 +625,13 @@
 
     if (analyser) {
       analyser.getByteFrequencyData(freq); analyser.getByteTimeDomainData(wave);
+      let op = 0; for (let i = 0; i < wave.length; i += 8) op = Math.max(op, Math.abs(wave[i] - 128));
+      outLevel = Math.max(op / 128, outLevel * 0.9);
+      const lit = Math.round(Math.min(outLevel * 1.35, 1) * leds.length);
+      leds.forEach((el, i) => el.classList.toggle('on', i < lit));
+      // light the sequencer step that is sounding right now
+      let cur = nowStep; while (SQ.shown.length && SQ.shown[0][0] <= ctx.currentTime) cur = SQ.shown.shift()[1];
+      if (cur !== nowStep) { nowStep = cur; [...$('#tdSteps').children].forEach((b, i) => b.classList.toggle('now', i === nowStep)); }
       inAn.getByteTimeDomainData(inWave);
       let peak = 0; for (let i = 0; i < inWave.length; i += 4) peak = Math.max(peak, Math.abs(inWave[i] - 128));
       inLevel = Math.max(peak / 128, inLevel * 0.9);
