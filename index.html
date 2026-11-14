@@ -71,6 +71,8 @@
         <div class="tp">
           <button id="tpPlay" aria-pressed="false" aria-label="Start or stop the track"></button>
           <span class="tp-title" id="ttTitle">Track</span>
+          <button id="rackAdd" class="tp-add" aria-haspopup="true" aria-expanded="false">+ Gear</button>
+          <div class="rack-menu" id="rackMenu" hidden></div>
         </div>
         <div class="rig-row">
         <div class="mx">
@@ -93,7 +95,7 @@
           </div>
           <input type="range" class="mx-vol" id="mxVol" min="0" max="100" value="85" aria-label="Master volume">
         </div>
-        <div class="pd">
+        <div class="pd" data-mod="pd">
           <div class="pd-top"><span class="pd-logo">OMRI<b>6</b></span><span class="pd-name"><b>OS4</b> MkII</span></div>
           <div class="pd-panel">
             <div class="pd-sel">
@@ -117,7 +119,7 @@
         </div>
         </div>
         <p class="rig-note" id="pdRead"></p>
-        <div class="td" id="td">
+        <div class="td" id="td" data-mod="td">
           <div class="td-head">
             <span class="td-brand"><b>OS-3-MO</b> Analog Bass Line Synthesizer</span>
             <span class="td-wave" role="group" aria-label="Waveform"><button id="tdSaw" class="on" aria-label="Sawtooth">◿</button><button id="tdSqr" aria-label="Square">⊓</button></span>
@@ -142,6 +144,26 @@
             </div>
           </div>
           <p class="td-read" id="tdRead"></p>
+        </div>
+        <div class="ms" id="ms" data-mod="ms">
+          <div class="ms-head"><span class="ms-brand"><b>OS-101</b> Analog Synthesizer</span><span class="ms-read" id="msRead"></span></div>
+          <div class="ms-panel">
+            <div class="ms-g"><h6>LFO</h6><div class="ms-f"><label class="fd"><input type="range" min="0" max="100" value="45" data-f="lfo" aria-label="Rate"><span>Rate</span></label></div></div>
+            <div class="ms-g"><h6>VCO</h6><div class="ms-f"><label class="fd"><input type="range" min="0" max="100" value="0" data-f="vmod" aria-label="Mod"><span>Mod</span></label><label class="fd"><input type="range" min="0" max="100" value="0" data-f="port" aria-label="Glide"><span>Glide</span></label></div></div>
+            <div class="ms-g"><h6>Source Mixer</h6><div class="ms-f"><label class="fd"><input type="range" min="0" max="100" value="0" data-f="pulse" aria-label="Pulse"><span>Pulse</span></label><label class="fd"><input type="range" min="0" max="100" value="80" data-f="saw" aria-label="Saw"><span>Saw</span></label><label class="fd"><input type="range" min="0" max="100" value="40" data-f="sub" aria-label="Sub"><span>Sub</span></label><label class="fd"><input type="range" min="0" max="100" value="0" data-f="noise" aria-label="Noise"><span>Noise</span></label></div></div>
+            <div class="ms-g"><h6>VCF</h6><div class="ms-f"><label class="fd"><input type="range" min="0" max="100" value="45" data-f="freq" aria-label="Freq"><span>Freq</span></label><label class="fd"><input type="range" min="0" max="100" value="50" data-f="res" aria-label="Res"><span>Res</span></label><label class="fd"><input type="range" min="0" max="100" value="55" data-f="env" aria-label="Env"><span>Env</span></label><label class="fd"><input type="range" min="0" max="100" value="0" data-f="fmod" aria-label="Mod"><span>Mod</span></label><label class="fd"><input type="range" min="0" max="100" value="50" data-f="kybd" aria-label="Kybd"><span>Kybd</span></label></div></div>
+            <div class="ms-g"><h6>ENV</h6><div class="ms-f"><label class="fd"><input type="range" min="0" max="100" value="0" data-f="a" aria-label="A"><span>A</span></label><label class="fd"><input type="range" min="0" max="100" value="35" data-f="d" aria-label="D"><span>D</span></label><label class="fd"><input type="range" min="0" max="100" value="30" data-f="s" aria-label="S"><span>S</span></label><label class="fd"><input type="range" min="0" max="100" value="20" data-f="r" aria-label="R"><span>R</span></label></div></div>
+            <div class="ms-g"><h6>VCA</h6><div class="ms-f"><label class="fd"><input type="range" min="0" max="100" value="60" data-f="vol" aria-label="Level"><span>Level</span></label></div></div>
+            <div class="ms-btns">
+              <div><button id="msHold">Hold</button><button class="arp" data-a="1">Up</button><button class="arp" data-a="2">U&amp;D</button><button class="arp" data-a="3">Down</button></div>
+              <div><button id="msLoad">Load</button><button id="msRest">Rest</button><button id="msPlay" class="play">Play</button></div>
+              <div><button class="oct" data-o="-1">L</button><button class="oct on" data-o="0">M</button><button class="oct" data-o="1">H</button></div>
+            </div>
+          </div>
+          <div class="ms-bottom">
+            <div class="ms-bend"><input type="range" id="msBend" min="-100" max="100" value="0" aria-label="Pitch bender"><span>Bender</span></div>
+            <div class="ms-keys" id="msKeys" role="group" aria-label="Keyboard"></div>
+          </div>
         </div>
       </div>
     </div>

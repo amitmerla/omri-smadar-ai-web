@@ -93,7 +93,7 @@
     src.connect(pre); pre.connect(eq.low); eq.low.connect(eq.mid); eq.mid.connect(eq.hi);
     buildFx(eq.hi);
     input.connect(inAn);
-    buildPedal(); buildSynth(); applyMixer();
+    buildPedal(); buildSynth(); buildMs(); applyMixer();
     out.connect(master); master.connect(limiter); limiter.connect(analyser); analyser.connect(ctx.destination);
     apply();
   }
@@ -475,6 +475,122 @@
   bindKnobs('.knob.sk', 's', SK, key => { applySynth(); paintSynth(`${NAMES[key].toUpperCase()} ${Math.round(SK[key] * 100)}`); });
   paintSynth();
 
+  /* ---------- Red monosynth: two oscillators + sub + noise -> low-pass -> ADSR, with LFO, glide, arpeggiator and step sequencer ---------- */
+  const MSK = {}; document.querySelectorAll('#ms input[data-f]').forEach(i => (MSK[i.dataset.f] = i.value / 100));
+  const MS = { held: [], hold: false, arp: 0, oct: 0, seq: [4, 4, 16, 4, 7, 4, 14, 16, 4, 4, 11, 4, 9, 7, 4, 16], load: false, play: false, next: -1e9, n: 0, gate: false, cur: -1, bend: 0 };
+  let MY = null;
+  function buildMs() {
+    const g = v => { const n = ctx.createGain(); n.gain.value = v; return n; };
+    const osc = type => { const o = ctx.createOscillator(); o.type = type; o.start(); return o; };
+    MY = { saw: osc('sawtooth'), pulse: osc('square'), sub: osc('square'), lfo: osc('triangle'), sawG: g(0), pulseG: g(0), subG: g(0), noiseG: g(0),
+      f1: ctx.createBiquadFilter(), f2: ctx.createBiquadFilter(), vca: g(0), vol: g(0.5), lfoP: g(0), lfoF: g(0) };
+    const noise = ctx.createBufferSource(), nb = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate), nd = nb.getChannelData(0);
+    for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
+    noise.buffer = nb; noise.loop = true; noise.start();
+    MY.saw.connect(MY.sawG); MY.pulse.connect(MY.pulseG); MY.sub.connect(MY.subG); noise.connect(MY.noiseG);
+    [MY.sawG, MY.pulseG, MY.subG, MY.noiseG].forEach(n => n.connect(MY.f1));
+    MY.f1.connect(MY.f2); MY.f2.connect(MY.vca); MY.vca.connect(MY.vol); MY.vol.connect(pre);
+    MY.lfo.connect(MY.lfoP); MY.lfo.connect(MY.lfoF);
+    [MY.saw, MY.pulse, MY.sub].forEach(o => MY.lfoP.connect(o.detune)); MY.lfoF.connect(MY.f1.detune); MY.lfoF.connect(MY.f2.detune);
+    applyMs();
+  }
+  const sq2 = v => v * v;
+  const msHz = i => 65.41 * Math.pow(2, (5 + i + MS.oct * 12 + MS.bend * 2) / 12); // key 0 is the low F
+  const msCut = i => 60 * Math.pow(2, MSK.freq * 7.3) * Math.pow(msHz(Math.max(i, 0)) / 110, MSK.kybd);
+  function applyMs() {
+    if (!MY) return;
+    const t = ctx.currentTime, set = (prm, v) => prm.setTargetAtTime(v, t, 0.02);
+    set(MY.lfo.frequency, 0.1 * Math.pow(2, MSK.lfo * 7)); set(MY.lfoP.gain, sq2(MSK.vmod) * 600); set(MY.lfoF.gain, MSK.fmod * 2400);
+    set(MY.sawG.gain, MSK.saw * 0.5); set(MY.pulseG.gain, MSK.pulse * 0.5); set(MY.subG.gain, MSK.sub * 0.5); set(MY.noiseG.gain, MSK.noise * 0.4);
+    set(MY.f1.Q, 0.7 + MSK.res * 16); set(MY.f2.Q, 0.7 + MSK.res * 3); set(MY.vol.gain, MSK.vol * 0.8);
+    if (!MS.gate) { set(MY.f1.frequency, Math.min(18000, msCut(MS.cur))); set(MY.f2.frequency, Math.min(18000, msCut(MS.cur))); }
+    else if (MS.cur >= 0) [[MY.saw, 1], [MY.pulse, 1], [MY.sub, 0.5]].forEach(([o, m]) => set(o.frequency, msHz(MS.cur) * m)); // bender / transpose while a note sounds
+  }
+  function msOn(i, t, legato) {
+    const f = msHz(i), glide = sq2(MSK.port) * 0.4, A = 0.002 + sq2(MSK.a) * 1.5, Dk = 0.02 + sq2(MSK.d) * 2;
+    [[MY.saw, 1], [MY.pulse, 1], [MY.sub, 0.5]].forEach(([o, m]) => { o.frequency.cancelScheduledValues(t); glide > 0.004 ? o.frequency.setTargetAtTime(f * m, t, glide / 3) : o.frequency.setValueAtTime(f * m, t); });
+    MS.cur = i;
+    if (legato && MS.gate) return; // sliding between held keys does not re-trigger the envelope
+    const base = Math.min(18000, msCut(i)), peak = Math.min(18000, base * Math.pow(2, MSK.env * 5));
+    MY.vca.gain.cancelScheduledValues(t); MY.vca.gain.setTargetAtTime(1, t, A / 3 + 0.001); MY.vca.gain.setTargetAtTime(MSK.s, t + A, Dk / 3);
+    [MY.f1, MY.f2].forEach(fl2 => { fl2.frequency.cancelScheduledValues(t); fl2.frequency.setTargetAtTime(peak, t, A / 3 + 0.001); fl2.frequency.setTargetAtTime(base + (peak - base) * MSK.s, t + A, Dk / 3); });
+    MS.gate = true;
+  }
+  function msOff(t) {
+    const R = 0.01 + sq2(MSK.r) * 2.5, base = Math.min(18000, msCut(MS.cur));
+    MY.vca.gain.cancelScheduledValues(t); MY.vca.gain.setTargetAtTime(0, t, R / 3);
+    [MY.f1, MY.f2].forEach(fl2 => { fl2.frequency.cancelScheduledValues(t); fl2.frequency.setTargetAtTime(base, t, R / 3); });
+    MS.gate = false;
+  }
+  const msAuto = () => MS.play || (MS.arp && MS.held.length); // the clock is playing the notes, not the fingers
+  function msLight(i, at, len) { setTimeout(() => { const k = $('#msKeys').children[i]; if (!k) return; k.classList.add('on'); setTimeout(() => k.classList.remove('on'), len * 1000); }, Math.max(0, (at - ctx.currentTime) * 1000)); }
+  setInterval(() => { // arpeggiator and sequencer step on the track's sixteenths
+    if (!ctx || !MY || !msAuto()) return;
+    const [q, stepDur] = seqPos();
+    if (MS.next < q - 1 || MS.next > q + 8) MS.next = Math.ceil(q);
+    while (MS.next < q + 0.12 / stepDur) {
+      const t = ctx.currentTime + Math.max(0, (MS.next - q) * stepDur);
+      let note = null;
+      if (MS.play) note = MS.seq.length ? MS.seq[MS.n % MS.seq.length] : null;
+      else {
+        const up = [...new Set(MS.held)].sort((a, b) => a - b), order = MS.arp === 1 ? up : MS.arp === 3 ? up.slice().reverse() : up.concat(up.slice(1, -1).reverse());
+        note = order[MS.n % order.length];
+      }
+      if (note != null) { msOn(note, t, false); MY.vca.gain.setTargetAtTime(0, t + stepDur * 0.6, 0.004 + sq2(MSK.r) * 0.3); msLight(note, t, stepDur * 0.6); }
+      MS.n++; MS.next++;
+    }
+  }, 25);
+
+  { // keyboard: 32 keys from F; drag across keys to play a run
+    const keys = $('#msKeys'); let html = '', w = 0;
+    for (let i = 0; i < 32; i++) { const black = [1, 3, 6, 8, 10].includes((5 + i) % 12); html += black ? `<button class="b" data-i="${i}" style="left:${(w * 100 / 19).toFixed(2)}%" tabindex="-1"></button>` : `<button class="w" data-i="${i}" tabindex="-1"></button>`; if (!black) w++; }
+    keys.innerHTML = html;
+    let down = false;
+    const press = i => {
+      if (MS.load) { MS.seq.push(i); if (ctx) { msOn(i, ctx.currentTime, false); MY.vca.gain.setTargetAtTime(0, ctx.currentTime + 0.18, 0.02); MS.gate = false; } return paintMs(); }
+      if (MS.hold && !down) MS.held = MS.held.filter(() => MS.arp); // with HOLD, a new key press replaces the held note (or joins the arpeggio)
+      if (!MS.held.includes(i)) MS.held.push(i);
+      if (ctx && !msAuto()) msOn(i, ctx.currentTime, MS.held.length > 1);
+      paintMs();
+    };
+    const release = i => {
+      if (MS.load || MS.hold) return;
+      MS.held = MS.held.filter(x => x !== i);
+      if (ctx && !MS.play) { if (MS.held.length && !MS.arp) msOn(MS.held[MS.held.length - 1], ctx.currentTime, true); else if (!MS.held.length) msOff(ctx.currentTime); }
+      paintMs();
+    };
+    let last = -1;
+    const at = e => { const el = document.elementFromPoint(e.clientX, e.clientY); return el && el.parentElement === keys ? +el.dataset.i : -1; };
+    keys.addEventListener('pointerdown', e => { e.preventDefault(); if (!ctx) start(); const i = at(e); if (i < 0) return; keys.setPointerCapture(e.pointerId); press(i); down = true; last = i; });
+    keys.addEventListener('pointermove', e => { if (!down) return; const i = at(e); if (i !== last && i >= 0) { const prev = last; last = i; press(i); release(prev); } });
+    const up = () => { if (!down) return; down = false; release(last); last = -1; };
+    keys.addEventListener('pointerup', up); keys.addEventListener('pointercancel', up);
+  }
+  function msStop() { MS.play = false; MS.held = []; MS.hold = false; MS.arp = 0; MS.load = false; if (MY) msOff(ctx.currentTime); paintMs(); }
+  function paintMs(msg) {
+    [...$('#msKeys').children].forEach((k, i) => k.classList.toggle('on', MS.held.includes(i) && !msAuto()));
+    $('#msHold').classList.toggle('on', MS.hold); $('#msLoad').classList.toggle('on', MS.load); $('#msPlay').classList.toggle('on', MS.play);
+    document.querySelectorAll('#ms .arp').forEach(b => b.classList.toggle('on', +b.dataset.a === MS.arp));
+    document.querySelectorAll('#ms .oct').forEach(b => b.classList.toggle('on', +b.dataset.o === MS.oct));
+    $('#msRead').textContent = msg || (MS.load ? `LOAD · ${MS.seq.length} steps · play keys, REST for a gap, LOAD to finish` : MS.play ? `SEQUENCE · ${MS.seq.length} steps` : MS.arp ? `ARPEGGIO ${['', 'up', 'up & down', 'down'][MS.arp]} · hold some keys` : 'play the keys · PLAY runs the sequence');
+  }
+  $('#msHold').addEventListener('click', () => { MS.hold = !MS.hold; if (!MS.hold) { MS.held = []; if (MY && !MS.play) msOff(ctx.currentTime); } paintMs(); });
+  document.querySelectorAll('#ms .arp').forEach(b => b.addEventListener('click', () => { MS.arp = MS.arp === +b.dataset.a ? 0 : +b.dataset.a; MS.n = 0; MS.next = -1e9; if (!MS.arp && MY && !MS.held.length) msOff(ctx.currentTime); paintMs(); }));
+  document.querySelectorAll('#ms .oct').forEach(b => b.addEventListener('click', () => { MS.oct = +b.dataset.o; applyMs(); paintMs(); }));
+  $('#msLoad').addEventListener('click', () => { MS.load = !MS.load; if (MS.load) { MS.seq = []; MS.play = false; } paintMs(); });
+  $('#msRest').addEventListener('click', () => { if (MS.load) { MS.seq.push(null); paintMs(); } });
+  $('#msPlay').addEventListener('click', () => {
+    if (!ctx) return start().then(() => $('#msPlay').click());
+    MS.play = !MS.play; MS.load = false; MS.n = 0; MS.next = -1e9; if (!MS.play) msOff(ctx.currentTime); paintMs();
+  });
+  const FNAMES = { lfo: 'LFO rate', vmod: 'pitch mod', port: 'glide', pulse: 'pulse', saw: 'saw', sub: 'sub osc', noise: 'noise', freq: 'cutoff', res: 'resonance', env: 'filter env', fmod: 'filter mod', kybd: 'key follow', a: 'attack', d: 'decay', s: 'sustain', r: 'release', vol: 'level' };
+  document.querySelectorAll('#ms input[data-f]').forEach(inp => inp.addEventListener('input', () => { MSK[inp.dataset.f] = inp.value / 100; applyMs(); paintMs(`${FNAMES[inp.dataset.f].toUpperCase()} ${inp.value}`); }));
+  { // bender springs back to centre
+    const b = $('#msBend'); b.addEventListener('input', () => { MS.bend = b.value / 100; applyMs(); });
+    ['pointerup', 'pointercancel', 'blur'].forEach(ev => b.addEventListener(ev, () => { b.value = 0; MS.bend = 0; applyMs(); }));
+  }
+  paintMs();
+
   /* ---------- The pedal: one stereo delay engine, voiced 30 ways ---------- */
   // Two delay lines (A and B). Each line's repeats pass through a high-pass, a low-pass and a saturator/bit-crusher,
   // then feed back into itself and/or across into the other line. LFOs wobble the delay times and sweep the filters.
@@ -760,6 +876,36 @@
   $('#tpPlay').addEventListener('click', () => (ctx ? DECK.toggle() : start()));
   $('#mxVol').addEventListener('input', e => { if (master) master.gain.setTargetAtTime(e.target.value / 100, ctx.currentTime, 0.02); });
   paint();
+
+  /* ---------- Rack: the mixer is fixed; everything else can be added from a list and removed ---------- */
+  const GEAR = {
+    pd: { name: 'OS4 MkII delay pedal', desc: '30 delay models, looper, tap tempo', color: '#2fa25a', els: ['.pd', '#pdRead'],
+      off() { SEL.active = null; if (ctx) { LP.rec = null; lpStopSrc(); LP.state = LP.layers.length ? 'stop' : 'empty'; } apply(); },
+      on() { if (!SEL.active && !looper()) recall('A'); } },
+    td: { name: 'OS-3-MO bass line', desc: 'Acid bass synth with 16-step sequencer', color: '#c4c8ce', els: ['#td'], off() { if (SQ.run) $('#tdRun').click(); }, on() {} },
+    ms: { name: 'OS-101 monosynth', desc: 'Red keyboard synth: faders, arpeggiator, sequencer', color: '#e02a20', els: ['#ms'], off() { msStop(); }, on() {} }
+  };
+  let rack = ['pd', 'td', 'ms'];
+  try { const saved = JSON.parse(localStorage.getItem('omri-rack')); if (Array.isArray(saved)) rack = saved.filter(k => GEAR[k]); } catch (e) {}
+  const menu = $('#rackMenu'), addBtn = $('#rackAdd');
+  function paintRack() {
+    Object.entries(GEAR).forEach(([k, gear]) => gear.els.forEach(sel => ($(sel).hidden = !rack.includes(k))));
+    const spare = Object.keys(GEAR).filter(k => !rack.includes(k));
+    addBtn.disabled = !spare.length; addBtn.textContent = spare.length ? '+ Gear' : 'All gear out';
+    menu.innerHTML = spare.map(k => `<button data-k="${k}"><i style="background:${GEAR[k].color}"></i><span><b>${GEAR[k].name}</b><em>${GEAR[k].desc}</em></span></button>`).join('');
+    if (!spare.length) { menu.hidden = true; addBtn.setAttribute('aria-expanded', false); }
+    try { localStorage.setItem('omri-rack', JSON.stringify(rack)); } catch (e) {}
+  }
+  Object.entries(GEAR).forEach(([k, gear]) => {
+    const x = document.createElement('button'); x.className = 'rack-x'; x.textContent = '×'; x.title = 'Remove ' + gear.name; x.setAttribute('aria-label', 'Remove ' + gear.name);
+    x.addEventListener('click', () => { rack = rack.filter(r => r !== k); gear.off(); paintRack(); });
+    $(gear.els[0]).appendChild(x);
+  });
+  addBtn.addEventListener('click', () => { menu.hidden = !menu.hidden; addBtn.setAttribute('aria-expanded', !menu.hidden); });
+  menu.addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; rack.push(b.dataset.k); GEAR[b.dataset.k].on(); menu.hidden = true; addBtn.setAttribute('aria-expanded', false); paintRack(); });
+  document.addEventListener('pointerdown', e => { if (!menu.hidden && !e.target.closest('.tp')) { menu.hidden = true; addBtn.setAttribute('aria-expanded', false); } });
+  rack.length < 3 && Object.keys(GEAR).filter(k => !rack.includes(k)).forEach(k => GEAR[k].off());
+  paintRack();
 
   /* ---------- Per-frame: beat clock, ducking and swell, tempo light ---------- */
   const bpmEl = $('#mxBpm'), tapEl = $('#fsTAP'), leds = [...document.querySelectorAll('#mxMeter i')];
