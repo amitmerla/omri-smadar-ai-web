@@ -108,7 +108,7 @@
     } catch (e) { console.warn('deck: could not load audio', e); }
     $('#ttTitle').textContent = title;
     document.querySelectorAll('[data-track-title]').forEach(e => (e.textContent = title.split(' · ')[0]));
-    if (buf) analyse(buf); else info.textContent = 'no bpm';
+    if (buf) { analyse(buf); analyseHarmony(buf); } else info.textContent = 'no bpm';
     if (st.analysed && T.auto) { T.beat = st.period; apply(); }
   }
   function sync() {
@@ -157,6 +157,73 @@
       console.warn('deck: analysis failed', e);
       info.textContent = 'no bpm';
     }
+  }
+
+  /* ---------- Harmony: the song's key, and the chord in every bar, measured from the audio ---------- */
+  // A spectrum is taken every ~0.19 s and folded into the 12 pitch classes (a chromagram). The whole-song chroma is
+  // matched against major/minor key profiles; then each bar's chroma picks the best-fitting chord from that key.
+  const NOTE_N = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+  const H = { ready: false, key: 9, minor: true, chords: [], top: [] };
+  const chordName = c => NOTE_N[c.root] + (c.minor ? 'm' : '');
+  async function analyseHarmony(buf) {
+    try {
+      const dec = Math.max(1, Math.round(buf.sampleRate / 11025)), sr = buf.sampleRate / dec, N = 4096, hop = 2048;
+      const a = buf.getChannelData(0), b = buf.numberOfChannels > 1 ? buf.getChannelData(1) : a, len = Math.floor(a.length / dec);
+      const x = new Float32Array(len);
+      for (let i = 0, j = 0; i < len; i++) { let s = 0; for (let k = 0; k < dec; k++, j++) s += a[j] + b[j]; x[i] = s / (2 * dec); }
+      // radix-2 FFT tables
+      const bits = Math.log2(N), revs = new Uint16Array(N), cos = new Float32Array(N / 2), sin = new Float32Array(N / 2), win = new Float32Array(N);
+      for (let i = 0; i < N; i++) { let r = 0; for (let k = 0; k < bits; k++) r |= ((i >> k) & 1) << (bits - 1 - k); revs[i] = r; win[i] = 0.5 - 0.5 * Math.cos((2 * Math.PI * i) / N); }
+      for (let i = 0; i < N / 2; i++) { cos[i] = Math.cos((2 * Math.PI * i) / N); sin[i] = Math.sin((2 * Math.PI * i) / N); }
+      const binPc = new Int8Array(N / 2).fill(-1), binLow = new Uint8Array(N / 2);
+      for (let k = 1; k < N / 2; k++) { const f = (k * sr) / N; if (f >= 50 && f <= 1800) { binPc[k] = ((Math.round(12 * Math.log2(f / 261.63)) % 12) + 12) % 12; binLow[k] = f < 190 ? 1 : 0; } }
+      const re = new Float32Array(N), im = new Float32Array(N), frames = Math.max(0, Math.floor((len - N) / hop)), chroma = [], total = new Float32Array(12);
+      for (let fr = 0; fr < frames; fr++) {
+        const o = fr * hop;
+        for (let i = 0; i < N; i++) { re[revs[i]] = x[o + i] * win[i]; im[i] = 0; }
+        for (let size = 2; size <= N; size <<= 1) {
+          const half = size >> 1, stepT = N / size;
+          for (let s = 0; s < N; s += size) for (let k = 0, t = 0; k < half; k++, t += stepT) {
+            const i1 = s + k, i2 = i1 + half, tr = re[i2] * cos[t] + im[i2] * sin[t], ti = im[i2] * cos[t] - re[i2] * sin[t];
+            re[i2] = re[i1] - tr; im[i2] = im[i1] - ti; re[i1] += tr; im[i1] += ti;
+          }
+        }
+        const c = new Float32Array(24); // 0..11 all registers, 12..23 bass register only
+        for (let k = 1; k < N / 2; k++) { const pc = binPc[k]; if (pc < 0) continue; const m = Math.sqrt(re[k] * re[k] + im[k] * im[k]); c[pc] += m; if (binLow[k]) c[12 + pc] += m; }
+        chroma.push(c); for (let i = 0; i < 12; i++) total[i] += c[i];
+        if (fr % 120 === 119) await new Promise(r => setTimeout(r)); // stay off the animation's back
+      }
+      // key: best correlation with the Krumhansl key profiles
+      const MAJ = [6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88], MIN = [6.33, 2.68, 3.52, 5.38, 2.6, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17];
+      const corr = (v, prof, rot) => { let mv = 0, mp = 0; for (let i = 0; i < 12; i++) { mv += v[i]; mp += prof[i]; } mv /= 12; mp /= 12; let n = 0, d1 = 0, d2 = 0; for (let i = 0; i < 12; i++) { const A = v[(i + rot) % 12] - mv, B = prof[i] - mp; n += A * B; d1 += A * A; d2 += B * B; } return n / Math.sqrt(d1 * d2 || 1); };
+      let best = -2;
+      for (let k = 0; k < 12; k++) for (const minor of [false, true]) { const s = corr(total, minor ? MIN : MAJ, k); if (s > best) { best = s; H.key = k; H.minor = minor; } }
+      // chords allowed in that key, then the best one for every bar
+      const cand = (H.minor ? [[0, 1], [3, 0], [5, 1], [7, 1], [8, 0], [10, 0]] : [[0, 0], [2, 1], [4, 1], [5, 0], [7, 0], [9, 1]]).map(([d, m]) => ({ root: (H.key + d) % 12, minor: !!m }));
+      const bar = (st.analysed ? st.period : 60 / NOMINAL_BPM) * 4, fps = sr / hop, bars = Math.max(1, Math.ceil((len / sr - st.phase) / bar));
+      H.chords = [];
+      for (let bi = 0; bi < bars; bi++) {
+        const f0 = Math.max(0, Math.round((st.phase + bi * bar) * fps)), f1 = Math.min(frames, Math.round((st.phase + (bi + 1) * bar) * fps)), c = new Float32Array(24);
+        for (let f = f0; f < f1; f++) for (let i = 0; i < 24; i++) c[i] += chroma[f][i];
+        let sum = 0, lsum = 0; for (let i = 0; i < 12; i++) { sum += c[i]; lsum += c[12 + i]; }
+        let pickd = H.chords[bi - 1] || cand[0], top = -1;
+        if (sum > 0) for (const ch of cand) {
+          const s = (c[ch.root] + 0.8 * c[(ch.root + (ch.minor ? 3 : 4)) % 12] + 0.8 * c[(ch.root + 7) % 12]) / sum + 1.2 * (lsum ? c[12 + ch.root] / lsum : 0) + (H.chords[bi - 1] === ch ? 0.04 : 0);
+          if (s > top) { top = s; pickd = ch; }
+        }
+        H.chords.push(pickd);
+      }
+      const count = new Map(); H.chords.forEach(ch => count.set(ch, (count.get(ch) || 0) + 1));
+      H.top = [...count.entries()].sort((p1, p2) => p2[1] - p1[1]).slice(0, 4).map(e => e[0]);
+      H.ready = true; paintMs();
+    } catch (e) { console.warn('deck: harmony analysis failed', e); }
+  }
+  // the chord the song is on in the bar that holds sixteenth-note n
+  function chordAt(n) {
+    if (!H.ready || !H.chords.length) return { root: 9, minor: true };
+    const barsInTrack = audio.duration ? Math.max(1, Math.floor((audio.duration - st.phase) / (st.period * 4))) : H.chords.length;
+    const bi = ((Math.floor(n / 16) % barsInTrack) + barsInTrack) % barsInTrack;
+    return H.chords[Math.min(bi, H.chords.length - 1)];
   }
 
   /* ---------- Knob helper shared by the mixer and the synth ---------- */
@@ -522,7 +589,39 @@
     [MY.f1, MY.f2].forEach(fl2 => { fl2.frequency.cancelScheduledValues(t); fl2.frequency.setTargetAtTime(base, t, R / 3); });
     MS.gate = false;
   }
-  const msAuto = () => MS.play || (MS.arp && MS.held.length); // the clock is playing the notes, not the fingers
+  const msAuto = () => MS.smart || MS.play || (MS.arp && MS.held.length); // the clock is playing the notes, not the fingers
+  // Smart plays: ready-made parts that follow the song's own chords, bar by bar. Each has a fader patch and a
+  // generator that, for one sixteenth of a bar on a given chord, returns the notes to play (with optional pitch bends).
+  const KI = (pc, oct) => Math.max(0, Math.min(31, ((pc - 5 + 120) % 12) + oct * 12)); // pitch class -> key index
+  const tones = c => [c.root, (c.root + (c.minor ? 3 : 4)) % 12, (c.root + 7) % 12];
+  const PLAYS = [
+    { n: 'Arp chords', patch: { saw: 80, pulse: 30, sub: 0, noise: 0, freq: 50, res: 45, env: 60, fmod: 0, vmod: 0, port: 0, a: 0, d: 30, s: 10, r: 25, vol: 55 },
+      gen(s, b, c) { const t = tones(c), up = [KI(t[0], 0), KI(t[1], 0), KI(t[2], 0), KI(t[0], 1), KI(t[1], 1), KI(t[2], 1)]; return [{ i: up[[0, 1, 2, 3, 4, 5, 4, 3, 2, 3, 4, 5, 4, 3, 2, 1][s]], len: 0.7 }]; } },
+    { n: 'Chord stabs', patch: { saw: 70, pulse: 60, sub: 0, noise: 0, freq: 62, res: 30, env: 50, fmod: 0, vmod: 0, port: 0, a: 0, d: 22, s: 0, r: 18, vol: 55 },
+      gen(s, b, c) { // a mono synth can't hold a chord, so each stab is a very fast strum through it
+        if (![2, 6, 10, 13, 14].includes(s)) return []; const t = tones(c);
+        return [0, 1, 2].map(k => ({ i: KI(t[k], 1), off: k * 0.22, len: k === 2 ? 0.5 : 0.22 }));
+      } },
+    { n: 'Sub bass', patch: { saw: 40, pulse: 0, sub: 95, noise: 0, freq: 30, res: 35, env: 45, fmod: 0, vmod: 0, port: 8, a: 0, d: 35, s: 40, r: 10, vol: 70 },
+      gen(s, b, c) { return [0, 3, 6, 8, 11].includes(s) ? [{ i: KI(c.root, 0), len: 0.8 }] : s === 14 ? [{ i: KI(c.root, 1), len: 0.8, bend: [0, -12, 0.2, 0.7] }] : []; } },
+    { n: 'Bend lead', patch: { saw: 60, pulse: 50, sub: 20, noise: 0, freq: 62, res: 40, env: 35, fmod: 0, vmod: 12, port: 25, a: 2, d: 50, s: 60, r: 30, lfo: 62, vol: 50 },
+      gen(s, b, c) { // long notes that scoop up into pitch, with a whole-tone bend at the end of the phrase
+        const t = tones(c), r = b % 3, line = { 0: [t[(2 + r) % 3], 2, 3, [-2, 0, 0, 0.5]], 4: [t[(1 + r) % 3], 2, 2], 6: [t[r % 3], 2, 1.6], 8: [t[(2 + r) % 3], 1, 3.6, [0, 2, 1.6, 1.2]], 12: [t[(1 + r) % 3], 1, 2], 14: [t[r % 3], 1, 1.8, [-1, 0, 0, 0.4]] }[s];
+        return line ? [{ i: KI(line[0], line[1]), len: line[2], bend: line[3] }] : [];
+      } },
+    { n: 'Wobble', patch: { saw: 80, pulse: 0, sub: 70, noise: 0, freq: 36, res: 70, env: 8, fmod: 75, vmod: 0, port: 15, a: 0, d: 40, s: 85, r: 12, vol: 60 }, lfoBeats: 0.5,
+      gen(s, b, c) { return s === 0 ? [{ i: KI(c.root, 0), len: 7.7 }] : s === 8 ? [{ i: KI(b % 2 ? tones(c)[2] : c.root, 0), len: 7.7, bend: b % 4 === 3 ? [0, 12, 5, 2.5] : null }] : []; } },
+    { n: 'Gate lead', patch: { saw: 30, pulse: 80, sub: 0, noise: 0, freq: 46, res: 60, env: 70, fmod: 0, vmod: 0, port: 0, a: 0, d: 18, s: 0, r: 8, vol: 50 },
+      gen(s, b, c) { const t = tones(c); return [{ i: s % 4 === 3 ? KI(t[0], 2) : KI(t[s % 8 < 4 ? 0 : 2], 1), len: 0.5, bend: s === 15 && b % 2 ? [0, 2, 0, 0.9] : null }]; } }
+  ];
+  function setPatch(patch) { Object.entries(patch).forEach(([k, v]) => { MSK[k] = v / 100; const inp = document.querySelector(`#ms input[data-f="${k}"]`); if (inp) inp.value = v; }); applyMs(); }
+  function msBend(t, bend, stepDur) { // bend = [from, to, starts after N steps, lasts N steps], in semitones
+    [MY.saw.detune, MY.pulse.detune, MY.sub.detune].forEach(d => {
+      d.cancelScheduledValues(t);
+      if (!bend) return d.setValueAtTime(0, t);
+      d.setValueAtTime(bend[0] * 100, t); d.setValueAtTime(bend[0] * 100, t + bend[2] * stepDur); d.linearRampToValueAtTime(bend[1] * 100, t + (bend[2] + bend[3]) * stepDur);
+    });
+  }
   function msLight(i, at, len) { setTimeout(() => { const k = $('#msKeys').children[i]; if (!k) return; k.classList.add('on'); setTimeout(() => k.classList.remove('on'), len * 1000); }, Math.max(0, (at - ctx.currentTime) * 1000)); }
   setInterval(() => { // arpeggiator and sequencer step on the track's sixteenths
     if (!ctx || !MY || !msAuto()) return;
@@ -530,6 +629,15 @@
     if (MS.next < q - 1 || MS.next > q + 8) MS.next = Math.ceil(q);
     while (MS.next < q + 0.12 / stepDur) {
       const t = ctx.currentTime + Math.max(0, (MS.next - q) * stepDur);
+      if (MS.smart) { // a smart play: ask its generator what this sixteenth holds, on the chord the song is on right now
+        const chord = chordAt(MS.next), s = ((MS.next % 16) + 16) % 16;
+        if (s === 0 || chord !== MS.shownChord) { MS.shownChord = chord; setTimeout(() => { if (MS.smart) paintMs(); }, Math.max(0, (t - ctx.currentTime) * 1000)); }
+        MS.smart.gen(s, Math.floor(MS.next / 16), chord).forEach(ev => {
+          const at = t + (ev.off || 0) * stepDur, len = ev.len * stepDur;
+          msOn(ev.i, at, false); msBend(at, ev.bend, stepDur); MY.vca.gain.setTargetAtTime(0, at + len, 0.004 + sq2(MSK.r) * 0.3); msLight(ev.i, at, len);
+        });
+        MS.next++; continue;
+      }
       let note = null;
       if (MS.play) note = MS.seq.length ? MS.seq[MS.n % MS.seq.length] : null;
       else {
@@ -566,22 +674,35 @@
     const up = () => { if (!down) return; down = false; release(last); last = -1; };
     keys.addEventListener('pointerup', up); keys.addEventListener('pointercancel', up);
   }
-  function msStop() { MS.play = false; MS.held = []; MS.hold = false; MS.arp = 0; MS.load = false; if (MY) msOff(ctx.currentTime); paintMs(); }
+  function msStop() { MS.smart = null; MS.play = false; MS.held = []; MS.hold = false; MS.arp = 0; MS.load = false; if (MY) msOff(ctx.currentTime); paintMs(); }
   function paintMs(msg) {
     [...$('#msKeys').children].forEach((k, i) => k.classList.toggle('on', MS.held.includes(i) && !msAuto()));
     $('#msHold').classList.toggle('on', MS.hold); $('#msLoad').classList.toggle('on', MS.load); $('#msPlay').classList.toggle('on', MS.play);
     document.querySelectorAll('#ms .arp').forEach(b => b.classList.toggle('on', +b.dataset.a === MS.arp));
     document.querySelectorAll('#ms .oct').forEach(b => b.classList.toggle('on', +b.dataset.o === MS.oct));
-    $('#msRead').textContent = msg || (MS.load ? `LOAD · ${MS.seq.length} steps · play keys, REST for a gap, LOAD to finish` : MS.play ? `SEQUENCE · ${MS.seq.length} steps` : MS.arp ? `ARPEGGIO ${['', 'up', 'up & down', 'down'][MS.arp]} · hold some keys` : 'play the keys · PLAY runs the sequence');
+    document.querySelectorAll('#msPlays button').forEach((b, i) => b.classList.toggle('on', MS.smart === PLAYS[i]));
+    const bpm = st.analysed ? Math.round(60 / st.period) : 0;
+    $('#msKey').textContent = H.ready ? `${NOTE_N[H.key]} ${H.minor ? 'minor' : 'major'} · ${bpm} BPM · ${MS.smart && MS.shownChord ? 'now on ' + chordName(MS.shownChord) : 'chords ' + H.top.map(chordName).join(' ')}` : ctx ? 'listening to the song…' : 'start the track to analyse it';
+    $('#msRead').textContent = msg || (MS.smart ? `SMART PLAY · ${MS.smart.n} · following the song's chords` : MS.load ? `LOAD · ${MS.seq.length} steps · play keys, REST for a gap, LOAD to finish` : MS.play ? `SEQUENCE · ${MS.seq.length} steps` : MS.arp ? `ARPEGGIO ${['', 'up', 'up & down', 'down'][MS.arp]} · hold some keys` : 'play the keys · PLAY runs the sequence');
   }
+  $('#msPlays').innerHTML = PLAYS.map(pl => `<button>${pl.n}</button>`).join('');
+  [...$('#msPlays').children].forEach((b, i) => b.addEventListener('click', () => {
+    if (!ctx) return start().then(() => b.click());
+    const pl = PLAYS[i], stop = MS.smart === pl;
+    MS.play = false; MS.load = false; MS.arp = 0; MS.held = []; MS.n = 0; MS.next = -1e9; MS.shownChord = null;
+    msOff(ctx.currentTime); msBend(ctx.currentTime, null, 0);
+    MS.smart = stop ? null : pl;
+    if (!stop) { setPatch(pl.patch); if (pl.lfoBeats) MY.lfo.frequency.setTargetAtTime(1 / (beatLen() * pl.lfoBeats), ctx.currentTime, 0.02); } // wobble locks its LFO to the beat
+    paintMs();
+  }));
   $('#msHold').addEventListener('click', () => { MS.hold = !MS.hold; if (!MS.hold) { MS.held = []; if (MY && !MS.play) msOff(ctx.currentTime); } paintMs(); });
-  document.querySelectorAll('#ms .arp').forEach(b => b.addEventListener('click', () => { MS.arp = MS.arp === +b.dataset.a ? 0 : +b.dataset.a; MS.n = 0; MS.next = -1e9; if (!MS.arp && MY && !MS.held.length) msOff(ctx.currentTime); paintMs(); }));
+  document.querySelectorAll('#ms .arp').forEach(b => b.addEventListener('click', () => { MS.smart = null; MS.arp = MS.arp === +b.dataset.a ? 0 : +b.dataset.a; MS.n = 0; MS.next = -1e9; if (!MS.arp && MY && !MS.held.length) msOff(ctx.currentTime); paintMs(); }));
   document.querySelectorAll('#ms .oct').forEach(b => b.addEventListener('click', () => { MS.oct = +b.dataset.o; applyMs(); paintMs(); }));
   $('#msLoad').addEventListener('click', () => { MS.load = !MS.load; if (MS.load) { MS.seq = []; MS.play = false; } paintMs(); });
   $('#msRest').addEventListener('click', () => { if (MS.load) { MS.seq.push(null); paintMs(); } });
   $('#msPlay').addEventListener('click', () => {
     if (!ctx) return start().then(() => $('#msPlay').click());
-    MS.play = !MS.play; MS.load = false; MS.n = 0; MS.next = -1e9; if (!MS.play) msOff(ctx.currentTime); paintMs();
+    MS.smart = null; MS.play = !MS.play; MS.load = false; MS.n = 0; MS.next = -1e9; if (!MS.play) msOff(ctx.currentTime); paintMs();
   });
   const FNAMES = { lfo: 'LFO rate', vmod: 'pitch mod', port: 'glide', pulse: 'pulse', saw: 'saw', sub: 'sub osc', noise: 'noise', freq: 'cutoff', res: 'resonance', env: 'filter env', fmod: 'filter mod', kybd: 'key follow', a: 'attack', d: 'decay', s: 'sustain', r: 'release', vol: 'level' };
   document.querySelectorAll('#ms input[data-f]').forEach(inp => inp.addEventListener('input', () => { MSK[inp.dataset.f] = inp.value / 100; applyMs(); paintMs(`${FNAMES[inp.dataset.f].toUpperCase()} ${inp.value}`); }));
@@ -589,6 +710,7 @@
     const b = $('#msBend'); b.addEventListener('input', () => { MS.bend = b.value / 100; applyMs(); });
     ['pointerup', 'pointercancel', 'blur'].forEach(ev => b.addEventListener(ev, () => { b.value = 0; MS.bend = 0; applyMs(); }));
   }
+  document.querySelectorAll('.ms-btns button').forEach(b => { b.dataset.l = b.textContent; b.setAttribute('aria-label', b.textContent); }); // legends are printed on the body under each button
   paintMs();
 
   /* ---------- The pedal: one stereo delay engine, voiced 30 ways ---------- */
