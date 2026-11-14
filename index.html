@@ -95,6 +95,29 @@
           </div>
           <input type="range" class="mx-vol" id="mxVol" min="0" max="100" value="85" aria-label="Master volume">
         </div>
+        <div class="bs" id="bs" data-mod="bs">
+          <div class="bs-top">
+            <div class="bs-type">
+              <ul id="bsTypes" aria-label="Reverb machine"></ul>
+              <div class="bs-k"><div class="knob bk enc" id="bsType" role="slider" tabindex="0" aria-label="Reverb type"><i></i></div><label>Type</label></div>
+            </div>
+            <div class="bs-main">
+              <div class="bs-row1">
+                <div class="bs-lcd" id="bsLcd" aria-live="off">00B HALL</div>
+                <div class="bs-k"><div class="knob bk enc" id="bsValue" role="slider" tabindex="0" aria-label="Preset bank"><i></i></div><label>Value</label></div>
+              </div>
+              <div class="bs-knobs">
+                <div class="bs-k"><div class="knob bk" data-b="decay" role="slider" tabindex="0" aria-label="Decay" aria-valuemin="0" aria-valuemax="100"><i></i></div><label>Decay</label></div><div class="bs-k"><div class="knob bk" data-b="pre" role="slider" tabindex="0" aria-label="Pre-Delay" aria-valuemin="0" aria-valuemax="100"><i></i></div><label>Pre-Delay</label></div><div class="bs-k"><div class="knob bk" data-b="mix" role="slider" tabindex="0" aria-label="Mix" aria-valuemin="0" aria-valuemax="100"><i></i></div><label>Mix</label></div><div class="bs-k"><div class="knob bk" data-b="tone" role="slider" tabindex="0" aria-label="Tone" aria-valuemin="0" aria-valuemax="100"><i></i></div><label>Tone</label></div><div class="bs-k"><div class="knob bk" data-b="p1" role="slider" tabindex="0" aria-label="Param 1" aria-valuemin="0" aria-valuemax="100"><i></i></div><label>Param 1</label></div><div class="bs-k"><div class="knob bk" data-b="p2" role="slider" tabindex="0" aria-label="Param 2" aria-valuemin="0" aria-valuemax="100"><i></i></div><label>Param 2</label></div><div class="bs-k"><div class="knob bk" data-b="mod" role="slider" tabindex="0" aria-label="Mod" aria-valuemin="0" aria-valuemax="100"><i></i></div><label>Mod</label></div>
+              </div>
+            </div>
+          </div>
+          <div class="bs-foot">
+            <span class="bs-logo">os<b>sky</b><em>multidimensional reverberator</em></span>
+            <div class="fs"><button id="bsA" aria-label="Preset A"></button><b>A</b></div><div class="fs"><button id="bsB" aria-label="Preset B"></button><b>B</b></div><div class="fs"><button id="bsC" aria-label="Preset C"></button><b>C</b></div>
+            <span class="bs-hint">hold a switch<br>to freeze</span>
+          </div>
+        </div>
+        </div>
         <div class="pd" data-mod="pd">
           <div class="pd-top"><span class="pd-logo">OMRI<b>6</b></span><span class="pd-name"><b>OS4</b> MkII</span></div>
           <div class="pd-panel">
@@ -116,7 +139,6 @@
             <div class="fs"><b>C</b><button id="fsC" aria-label="Footswitch C"></button><span>▶ ONCE</span></div>
             <div class="fs"><b>TAP</b><button id="fsTAP" aria-label="Footswitch TAP"></button><span>½ / ←</span></div>
           </div>
-        </div>
         </div>
         <p class="rig-note" id="pdRead"></p>
         <div class="ms" id="ms" data-mod="ms">

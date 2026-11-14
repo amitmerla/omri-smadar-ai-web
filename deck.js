@@ -94,7 +94,7 @@
     buildFx(eq.hi);
     input.connect(inAn);
     buildPedal(); buildSynth(); buildMs(); applyMixer();
-    out.connect(master); master.connect(limiter); limiter.connect(analyser); analyser.connect(ctx.destination);
+    buildSky(); master.connect(limiter); limiter.connect(analyser); analyser.connect(ctx.destination);
     apply();
   }
   async function start() { // called once from the launch gesture
@@ -246,6 +246,7 @@
       });
     });
     paintAll();
+    return paintAll;
   }
 
   /* ---------- Mixer channel: EQ knobs ---------- */
@@ -770,7 +771,7 @@
     P.verb = ctx.createConvolver(); P.verb.buffer = ir; P.verbSend.connect(P.verb); P.verb.connect(P.duck);
     P.duck.connect(P.wet); P.wet.connect(out); P.loop.connect(out);
     ctx.audioWorklet && ctx.audioWorklet.addModule(URL.createObjectURL(new Blob([GRAIN], { type: 'text/javascript' }))).then(() => {
-      P.grain = new AudioWorkletNode(ctx, 'pedal-grain', { outputChannelCount: [2] });
+      P.grain = new AudioWorkletNode(ctx, 'pedal-grain', { outputChannelCount: [2] }); skyGrain();
       P.send.disconnect(); P.send.connect(P.grain); P.grain.connect(P.feed); apply();
     }).catch(e => console.warn('pedal: reverse/pitch models unavailable', e));
     // the looper listens to the pedal input
@@ -999,16 +1000,153 @@
   $('#mxVol').addEventListener('input', e => { if (master) master.gain.setTargetAtTime(e.target.value / 100, ctx.currentTime, 0.02); });
   paint();
 
+  /* ---------- Reverb pedal: twelve reverb machines, last in the chain (track + synths -> mixer -> delay -> reverb) ---------- */
+  // The reverb itself is a convolution: for each machine an impulse response is synthesised from its DECAY and PARAM
+  // knobs (noise shaped by an envelope and by damping that darkens over time, or discrete echoes / chirps for the
+  // special ones) and loaded into a ConvolverNode. Around it: pre-delay, tone filter, chorus (MOD), an octave-up
+  // feedback path for Shimmer, vowel filters for Chorale, a level follower for Swell, and a freeze loop.
+  const SKY = [ // name, decay range in seconds, PARAM 1 and PARAM 2 legends
+    ['ROOM', 0.15, 2.5, 'EARLY', 'DAMP'], ['HALL', 0.6, 9, 'BUILD', 'DAMP'], ['PLATE', 0.4, 7, 'BUILD', 'DAMP'], ['SPRING', 0.5, 4, 'DWELL', 'SPRNG'],
+    ['SWELL', 0.8, 9, 'RISE', 'DAMP'], ['BLOOM', 1, 10, 'BLOOM', 'DAMP'], ['CLOUD', 2, 12, 'BUILD', 'DAMP'], ['CHORALE', 0.8, 9, 'VOWEL', 'DAMP'],
+    ['SHIMMER', 1, 10, 'AMNT', 'PITCH'], ['MAGNETO', 0.5, 8, 'HEADS', 'DIFF'], ['NONLINEAR', 0.08, 1.5, 'SHAPE', 'DAMP'], ['REFLECTIONS', 0.05, 0.4, 'WIDTH', 'DEPTH']
+  ];
+  const BK = { decay: 0.5, pre: 0.1, mix: 0.35, tone: 0.7, p1: 0.5, p2: 0.3, mod: 0.2 };
+  const SKP = SKY.map((s, i) => ({ type: i, decay: 0.5, pre: i === 1 ? 0.12 : 0.05, mix: [6, 10, 11].includes(i) ? 0.5 : 0.35, tone: 0.7, p1: i === 8 ? 0.6 : 0.5, p2: i === 8 ? 0 : 0.3, mod: 0.2 })); // 4 banks x A/B/C, one machine each
+  try { const saved = JSON.parse(localStorage.getItem('omri-sky')); if (Array.isArray(saved) && saved.length === 12) saved.forEach((s, i) => Object.assign(SKP[i], s)); } catch (e) {}
+  const SS = { bank: 0, slot: 1, on: true, type: 1, frozen: false, msgUntil: 0, irTimer: 0 };
+  let BS = null, paintBk = null;
+  const skyDecay = () => SKY[SS.type][1] * Math.pow(SKY[SS.type][2] / SKY[SS.type][1], BK.decay);
+
+  function makeIR() {
+    const sr = ctx.sampleRate, T = SS.type, decay = skyDecay(), p1 = BK.p1, p2 = BK.p2;
+    let seed = 1234567; const rnd = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296) * 2 - 1; // repeatable noise: turning a knob reshapes the room, it doesn't re-roll it
+    const attack = T === 5 ? 0.2 + p1 : T === 6 ? 0.15 + p1 * 0.6 : T === 1 || T === 2 || T === 4 || T === 7 || T === 8 ? 0.01 + p1 * 0.12 : 0;
+    const secs = T === 10 ? decay : T === 11 ? 0.32 : Math.min(12, decay * 1.5 + attack), n = Math.max(64, Math.round(secs * sr)), buf = ctx.createBuffer(2, n, sr);
+    const [hi, lo] = { 0: [9000, 2500], 2: [13000, 4500], 6: [4200, 800], 8: [12000, 3500], 10: [9000, 5000] }[T] || [7500, 1300];
+    const damp = T === 3 || T === 9 || T === 11 ? 0 : 1 - p2 * 0.7;
+    for (let c = 0; c < 2; c++) {
+      const d = buf.getChannelData(c);
+      if (T === 3) { // spring: a train of downward chirps, like sound smearing along a coil
+        const gap = 0.031 + p2 * 0.022 + c * 0.0017, len = Math.round(0.034 * sr);
+        for (let k = 0; k * gap < secs; k++) {
+          const s0 = Math.round(k * gap * sr), amp = Math.exp((-6.9 * k * gap) / decay) * (0.5 + p1); let ph = 0;
+          for (let i = 0; i < len && s0 + i < n; i++) { const u = i / len; ph += (2 * Math.PI * (4800 * Math.pow(0.06, u) + 220)) / sr; d[s0 + i] += Math.sin(ph) * amp * Math.sin(Math.PI * u) * (k % 2 ? -1 : 1); }
+        }
+        for (let i = 0; i < n; i++) d[i] += rnd() * 0.05 * Math.exp((-6.9 * i) / (decay * sr));
+      } else if (T === 9 || T === 11) { // magneto: evenly spaced tape heads; reflections: a scatter of early echoes
+        const taps = [];
+        if (T === 9) { const sp = 0.07 + p1 * 0.38; for (let k = 1; k * sp < secs; k++) taps.push([k * sp + (c ? 0.004 : 0), Math.exp((-6.9 * k * sp) / decay)]); }
+        else for (let k = 0; k < 16; k++) { const tt = 0.012 + Math.abs(rnd()) * (0.06 + p2 * 0.24); taps.push([tt, (0.9 - tt * 2) * (c ? 0.5 + p1 * Math.abs(rnd()) : 1)]); }
+        const smear = Math.round((T === 9 ? 0.003 + p2 * 0.03 : 0.0015) * sr);
+        taps.forEach(([tt, amp]) => { const s0 = Math.round(tt * sr); for (let i = 0; i < smear && s0 + i < n; i++) d[s0 + i] += rnd() * amp * (1 - i / smear); });
+      } else {
+        let y = 0;
+        for (let i = 0; i < n; i++) {
+          const t = i / sr, u = i / n;
+          let env;
+          if (T === 10) env = p1 < 0.34 ? (u < 0.92 ? 1 : (1 - u) / 0.08) : p1 < 0.67 ? u * u * (u < 0.97 ? 1 : (1 - u) / 0.03) : Math.sin(Math.PI * u); // gate, reverse, swoosh
+          else env = (attack && t < attack ? Math.pow(Math.sin((Math.PI / 2) * (t / attack)), 2) : 1) * Math.exp((-6.9 * Math.max(0, t - attack)) / decay);
+          const fc = hi * Math.pow((lo * damp + hi * (1 - damp)) / hi, u); // highs die away faster than lows
+          y += (1 - Math.exp((-2 * Math.PI * fc) / sr)) * (rnd() - y);
+          d[i] = y * env;
+        }
+        if (T === 0) for (let k = 0; k < 10; k++) { const s0 = Math.round((0.004 + Math.abs(rnd()) * 0.05) * sr); d[s0] += (0.5 + p1) * rnd() * 0.8; } // room: distinct first reflections
+      }
+    }
+    let e = 0; for (let c = 0; c < 2; c++) { const d = buf.getChannelData(c); for (let i = 0; i < n; i++) e += d[i] * d[i]; }
+    const k = (T === 11 || T === 9 ? 1.4 : 2.2) / Math.sqrt(e / 2 || 1);
+    for (let c = 0; c < 2; c++) { const d = buf.getChannelData(c); for (let i = 0; i < n; i++) d[i] *= k; }
+    return buf;
+  }
+  function buildSky() {
+    const g = v => { const n = ctx.createGain(); n.gain.value = v; return n; };
+    const bq = (type, f, q, gain) => { const n = ctx.createBiquadFilter(); n.type = type; n.frequency.value = f; n.Q.value = q || 0.7; n.gain.value = gain || 0; return n; };
+    BS = { dry: g(1), send: g(1), pre: ctx.createDelay(1), conv: ctx.createConvolver(), tone: bq('lowpass', 12000), v1: bq('peaking', 700, 4), v2: bq('peaking', 1200, 5),
+      cho: ctx.createDelay(0.05), lfo: ctx.createOscillator(), lfoG: g(0), swell: g(1), wet: g(0), shFb: g(0), fzIn: g(1), fz: ctx.createDelay(1), fzFb: g(0), fzOut: g(0), grain: null, key: '' };
+    BS.cho.delayTime.value = 0.009; BS.lfo.frequency.value = 0.55; BS.lfo.start(); BS.lfo.connect(BS.lfoG); BS.lfoG.connect(BS.cho.delayTime); BS.fz.delayTime.value = 0.37;
+    out.connect(BS.dry); BS.dry.connect(master);
+    out.connect(BS.send); BS.send.connect(BS.pre); BS.pre.connect(BS.conv); BS.conv.connect(BS.tone); BS.tone.connect(BS.v1); BS.v1.connect(BS.v2); BS.v2.connect(BS.cho); BS.cho.connect(BS.swell); BS.swell.connect(BS.wet); BS.wet.connect(master);
+    BS.swell.connect(BS.fzIn); BS.fzIn.connect(BS.fz); BS.fz.connect(BS.fzFb); BS.fzFb.connect(BS.fz); BS.fz.connect(BS.fzOut); BS.fzOut.connect(BS.wet);
+    applySky();
+  }
+  function skyGrain() { // Shimmer: the reverb tail is pitched up and fed back into the reverb, so it climbs
+    if (!BS || BS.grain) return;
+    BS.grain = new AudioWorkletNode(ctx, 'pedal-grain', { outputChannelCount: [2] }); BS.grain.parameters.get('mode').value = 2;
+    BS.tone.connect(BS.grain); BS.grain.connect(BS.shFb); BS.shFb.connect(BS.pre); applySky();
+  }
+  const VOWELS = [[730, 1090], [570, 840], [300, 870], [270, 2290], [530, 1840]]; // ah, oh, oo, ee, eh
+  function applySky() {
+    paintSky();
+    if (!BS) return;
+    const t = ctx.currentTime, set = (prm, v, tc = 0.03) => prm.setTargetAtTime(v, t, tc), T = SS.type, on = SS.on;
+    set(BS.pre.delayTime, 0.002 + BK.pre * 0.4, 0.05); set(BS.tone.frequency, 500 * Math.pow(2, BK.tone * 5.3)); set(BS.lfoG.gain, BK.mod * 0.004);
+    set(BS.wet.gain, on ? Math.min(1, BK.mix * 2) : 0, 0.05); set(BS.dry.gain, on ? Math.min(1, (1 - BK.mix) * 2) : 1, 0.05);
+    if (!SS.frozen) set(BS.send.gain, on ? 1 : 0); // bypass shuts the door but lets the tail ring out
+    const vw = VOWELS[Math.min(4, Math.floor(BK.p1 * 5))];
+    set(BS.v1.frequency, vw[0]); set(BS.v2.frequency, vw[1]); set(BS.v1.gain, T === 7 ? 14 : 0); set(BS.v2.gain, T === 7 ? 14 : 0);
+    set(BS.shFb.gain, T === 8 ? BK.p1 * 0.55 : 0); if (BS.grain) BS.grain.parameters.get('ratio').value = BK.p2 < 0.5 ? 2 : 1.5;
+    if (T !== 4) set(BS.swell.gain, 1);
+    // rebuild the impulse response only when something that shapes it has moved, and not on every pixel of a drag
+    const key = [T, BK.decay.toFixed(2), [7, 8].includes(T) ? 0 : BK.p1.toFixed(2), T === 8 ? 0 : BK.p2.toFixed(2)].join('/');
+    if (key !== BS.key) { BS.key = key; clearTimeout(SS.irTimer); SS.irTimer = setTimeout(() => { BS.conv.buffer = makeIR(); }, BS.conv.buffer ? 140 : 0); }
+  }
+  const skySlot = () => SS.bank * 3 + SS.slot;
+  function skyRecall() { const pr = SKP[skySlot()]; SS.type = pr.type; Object.keys(BK).forEach(k => (BK[k] = pr[k])); SS.on = true; SS.msgUntil = 0; paintBk(); applySky(); }
+  function skyStore() { Object.assign(SKP[skySlot()], { type: SS.type }, BK); try { localStorage.setItem('omri-sky', JSON.stringify(SKP)); } catch (e) {} } // edits stay with the preset
+  function skyMsg(txt) { SS.msg = txt; SS.msgUntil = performance.now() + 1300; paintSky(); setTimeout(paintSky, 1350); }
+  function paintSky() {
+    [...$('#bsTypes').children].forEach((li, i) => li.classList.toggle('on', i === SS.type));
+    $('#bsType').style.setProperty('--r', -150 + (SS.type / 11) * 300 + 'deg'); $('#bsValue').style.setProperty('--r', -90 + SS.bank * 60 + 'deg');
+    ['A', 'B', 'C'].forEach((k, i) => { $('#bs' + k).dataset.led = SS.frozen && i === SS.slot ? 'red' : SS.on && i === SS.slot ? 'green' : ''; });
+    $('#bsLcd').textContent = SS.frozen ? 'FREEZE' : performance.now() < SS.msgUntil ? SS.msg : SS.on ? `0${SS.bank}${'ABC'[SS.slot]} ${SKY[SS.type][0]}` : 'BYPASS';
+  }
+  $('#bsTypes').innerHTML = SKY.map(s => `<li>${s[0]}</li>`).join('');
+  [...$('#bsTypes').children].forEach((li, i) => li.addEventListener('click', () => { SS.type = i; SS.on = true; skyStore(); skyMsg(SKY[i][0]); applySky(); }));
+  function encoder(el, get, set, max) { // stepped knob: click for the next step, drag to turn
+    let y0 = 0, v0 = 0, moved = false;
+    const move = e => { const d = Math.round((y0 - e.clientY) / 16); if (d) moved = true; const v = (((v0 + d) % max) + max) % max; if (v !== get()) set(v); };
+    el.addEventListener('pointerdown', e => {
+      e.preventDefault(); y0 = e.clientY; v0 = get(); moved = false; el.setPointerCapture(e.pointerId);
+      el.addEventListener('pointermove', move);
+      el.addEventListener('pointerup', () => { el.removeEventListener('pointermove', move); if (!moved) set((get() + 1) % max); }, { once: true });
+    });
+    el.addEventListener('keydown', e => { const d = e.key === 'ArrowUp' || e.key === 'ArrowRight' ? 1 : e.key === 'ArrowDown' || e.key === 'ArrowLeft' ? -1 : 0; if (d) { e.preventDefault(); set((get() + d + max) % max); } });
+  }
+  encoder($('#bsType'), () => SS.type, v => { SS.type = v; SS.on = true; skyStore(); skyMsg(SKY[v][0]); applySky(); }, 12);
+  encoder($('#bsValue'), () => SS.bank, v => { SS.bank = v; skyRecall(); }, 4); // VALUE steps through the four banks of three presets
+  paintBk = bindKnobs('.knob.bk[data-b]', 'b', BK, key => {
+    const v = BK[key], T = SS.type;
+    skyMsg(key === 'decay' ? `DECAY ${skyDecay().toFixed(skyDecay() < 1 ? 2 : 1)}s` : key === 'pre' ? `PRE ${Math.round(2 + v * 400)}ms` : key === 'mix' ? `MIX ${Math.round(v * 100)}%` : key === 'tone' ? `TONE ${(0.5 * Math.pow(2, v * 5.3)).toFixed(1)}k`
+      : key === 'mod' ? `MOD ${Math.round(v * 100)}` : `${SKY[T][key === 'p1' ? 3 : 4]} ${Math.round(v * 100)}`);
+    skyStore(); applySky();
+  });
+  function skyFreeze(on) { // hold a footswitch: the reverb's own sound circulates forever while the input is shut
+    SS.frozen = on;
+    if (BS) { const t = ctx.currentTime; BS.fzIn.gain.setTargetAtTime(on ? 0 : 1, t, 0.01); BS.fzFb.gain.setTargetAtTime(on ? 1 : 0, t, 0.01); BS.fzOut.gain.setTargetAtTime(on ? 1 : 0, t, on ? 0.01 : 0.4); BS.send.gain.setTargetAtTime(on || !SS.on ? 0 : 1, t, 0.02); }
+    paintSky();
+  }
+  ['A', 'B', 'C'].forEach((k, i) => {
+    const b = $('#bs' + k); let timer = 0, held = false;
+    b.addEventListener('pointerdown', () => { held = false; timer = setTimeout(() => { if (SS.on && i === SS.slot) { held = true; skyFreeze(true); } }, 350); });
+    ['pointerup', 'pointerleave', 'pointercancel'].forEach(ev => b.addEventListener(ev, () => { clearTimeout(timer); if (SS.frozen) skyFreeze(false); }));
+    b.addEventListener('click', () => {
+      if (held) return;
+      if (SS.on && SS.slot === i) { SS.on = false; applySky(); } else { SS.slot = i; skyRecall(); }
+    });
+  });
+  skyRecall();
+
   /* ---------- Rack: the mixer is fixed; everything else can be added from a list and removed ---------- */
   const GEAR = {
+    bs: { name: 'OS Sky reverb', desc: '12 reverb machines, presets, freeze', color: '#7cc3e6', els: ['#bs'], off() { SS.on = false; if (SS.frozen) skyFreeze(false); applySky(); }, on() { SS.on = true; applySky(); } },
     pd: { name: 'OS4 MkII delay pedal', desc: '30 delay models, looper, tap tempo', color: '#2fa25a', els: ['.pd', '#pdRead'],
       off() { SEL.active = null; if (ctx) { LP.rec = null; lpStopSrc(); LP.state = LP.layers.length ? 'stop' : 'empty'; } apply(); },
       on() {} },
     td: { name: 'OS-3-MO bass line', desc: 'Acid bass synth with 16-step sequencer', color: '#c4c8ce', els: ['#td'], off() { if (SQ.run) $('#tdRun').click(); }, on() {} },
     ms: { name: 'OS-101 monosynth', desc: 'Red keyboard synth: faders, arpeggiator, sequencer', color: '#e02a20', els: ['#ms'], off() { msStop(); }, on() {} }
   };
-  let rack = ['pd', 'td', 'ms'];
-  try { const saved = JSON.parse(localStorage.getItem('omri-rack')); if (Array.isArray(saved)) rack = saved.filter(k => GEAR[k]); } catch (e) {}
+  let rack = ['bs', 'ms', 'td'];
+  try { const saved = JSON.parse(localStorage.getItem('omri-rack2')); if (Array.isArray(saved)) rack = saved.filter(k => GEAR[k]); } catch (e) {}
   const menu = $('#rackMenu'), addBtn = $('#rackAdd');
   function paintRack() {
     Object.entries(GEAR).forEach(([k, gear]) => gear.els.forEach(sel => ($(sel).hidden = !rack.includes(k))));
@@ -1016,7 +1154,7 @@
     addBtn.disabled = !spare.length; addBtn.textContent = spare.length ? '+ Gear' : 'All gear out';
     menu.innerHTML = spare.map(k => `<button data-k="${k}"><i style="background:${GEAR[k].color}"></i><span><b>${GEAR[k].name}</b><em>${GEAR[k].desc}</em></span></button>`).join('');
     if (!spare.length) { menu.hidden = true; addBtn.setAttribute('aria-expanded', false); }
-    try { localStorage.setItem('omri-rack', JSON.stringify(rack)); } catch (e) {}
+    try { localStorage.setItem('omri-rack2', JSON.stringify(rack)); } catch (e) {}
   }
   Object.entries(GEAR).forEach(([k, gear]) => {
     const x = document.createElement('button'); x.className = 'rack-x'; x.textContent = '×'; x.title = 'Remove ' + gear.name; x.setAttribute('aria-label', 'Remove ' + gear.name);
@@ -1026,7 +1164,7 @@
   addBtn.addEventListener('click', () => { menu.hidden = !menu.hidden; addBtn.setAttribute('aria-expanded', !menu.hidden); });
   menu.addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; rack.push(b.dataset.k); GEAR[b.dataset.k].on(); menu.hidden = true; addBtn.setAttribute('aria-expanded', false); paintRack(); });
   document.addEventListener('pointerdown', e => { if (!menu.hidden && !e.target.closest('.tp')) { menu.hidden = true; addBtn.setAttribute('aria-expanded', false); } });
-  rack.length < 3 && Object.keys(GEAR).filter(k => !rack.includes(k)).forEach(k => GEAR[k].off());
+  Object.keys(GEAR).filter(k => !rack.includes(k)).forEach(k => GEAR[k].off());
   paintRack();
 
   /* ---------- Per-frame: beat clock, ducking and swell, tempo light ---------- */
@@ -1062,6 +1200,7 @@
       // Ducked / Dynamic: echoes drop while the track is loud and bloom in the gaps
       P.duck.gain.setTargetAtTime(1 - cfg.duck * Math.min(1, inLevel * 1.8), t, 0.06);
       // Auto-Vol: the input to the echoes swells in after each hit
+      if (SS.type === 4 && SS.on) BS.swell.gain.setTargetAtTime(inLevel > 0.25 ? 0.12 : 1, t, inLevel > 0.25 ? 0.03 : 0.1 + BK.p1 * 0.9); // Swell: the reverb rises behind each hit
       if (cfg.swell) P.send.gain.setTargetAtTime(inLevel > 0.2 ? 1 : 0, t, inLevel > 0.2 ? cfg.swell * 0.5 : 0.03);
       if (!looper()) tapEl.dataset.led = SEL.active && (t % delayTime()) / delayTime() < 0.16 ? 'red' : '';
     }

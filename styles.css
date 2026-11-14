@@ -340,6 +340,39 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 @media (hover: none) { .rack-x { opacity: .8; } }
 [data-mod][hidden], .rig-note[hidden] { display: none; }
 
+/* ---------- Reverb pedal: sky-blue brushed aluminium, type list with LEDs, red display, seven knobs, three footswitches ---------- */
+.bs { position: relative; width: 30em; flex: none; border-radius: .8em; color: #0e2a3a; filter: drop-shadow(0 1.6em 1.6em rgba(0, 0, 0, .75)); display: flex; flex-direction: column;
+  background:
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, .05) 0 1px, transparent 1px 3px),
+    linear-gradient(175deg, #a9dcf2 0, #7cc3e6 40%, #58a9d2 75%, #3f8fb9 100%);
+  box-shadow: inset 0 .08em 0 rgba(255, 255, 255, .8), inset 0 -.3em .5em rgba(0, 0, 0, .3), inset .1em 0 .2em rgba(255, 255, 255, .3); }
+.bs-top { flex: 1; display: flex; gap: .6em; padding: .8em .9em .5em; }
+.bs-type { width: 9.4em; flex: none; display: flex; flex-direction: column; align-items: center; justify-content: space-between; gap: .4em; }
+.bs-type ul { list-style: none; width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: .22em .5em; margin: 0; padding: 0; }
+.bs-type li { display: flex; align-items: center; gap: .5em; font-size: .44em; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; cursor: pointer; white-space: nowrap; }
+.bs-type li::before { content: ""; width: .75em; height: .75em; flex: none; border-radius: 50%; background: #2b5a73; box-shadow: inset 0 .1em .15em rgba(0, 0, 0, .5), 0 .06em 0 rgba(255, 255, 255, .5); }
+.bs-type li.on::before { background: #d6ffe0; box-shadow: 0 0 .7em .2em #3dff7a, 0 0 1.4em .3em rgba(61, 255, 122, .6); }
+.bs-main { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: space-between; gap: .5em; }
+.bs-row1 { display: flex; align-items: center; gap: .8em; }
+.bs-lcd { flex: 1; height: 2.3em; display: flex; align-items: center; padding: 0 .6em; border-radius: .25em; overflow: hidden; white-space: nowrap;
+  font: 700 1.05em ui-monospace, "SF Mono", Menlo, monospace; letter-spacing: .12em; color: #ff4133; text-shadow: 0 0 .5em rgba(255, 60, 40, .9);
+  background: linear-gradient(#1a0503, #0b0201); box-shadow: inset 0 .12em .4em #000, 0 .08em 0 rgba(255, 255, 255, .5); }
+.bs-knobs { display: flex; justify-content: space-between; }
+.bs-k { display: flex; flex-direction: column; align-items: center; gap: .3em; }
+.bs-k label { font-size: .4em; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; white-space: nowrap; }
+.knob.bk { width: 2.15em; height: 2.15em;
+  background: conic-gradient(from 0deg, #f6f7f8, #9ea3aa 12%, #eceef0 25%, #8d9299 38%, #f6f7f8 50%, #9ea3aa 62%, #eceef0 75%, #8d9299 88%, #f6f7f8);
+  box-shadow: 0 .25em .45em rgba(0, 0, 0, .55), 0 0 0 .08em #5f646b, inset 0 0 0 .22em rgba(255, 255, 255, .35), inset 0 0 .3em rgba(0, 0, 0, .35); }
+.knob.bk i { top: 4%; width: .2em; height: 40%; margin-left: -.1em; background: #12222c; box-shadow: none; }
+.knob.bk.enc { width: 2.5em; height: 2.5em; }
+.bs-foot { display: flex; align-items: center; justify-content: space-between; gap: .6em; padding: .5em 1.2em .7em; border-radius: 0 0 .8em .8em; background: linear-gradient(180deg, rgba(255, 255, 255, .28), rgba(255, 255, 255, 0) 55%); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .6); }
+.bs-logo { width: 7.6em; font-size: 1.15em; font-weight: 300; letter-spacing: -.02em; line-height: 1; }
+.bs-logo b { font-weight: 800; }
+.bs-logo em { display: block; margin-top: .35em; font-style: normal; font-size: .34em; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; opacity: .8; }
+.bs .fs { flex-direction: column; width: 3.6em; gap: .1em; }
+.bs .fs b { font-size: .8em; }
+.bs-hint { width: 7.6em; font-size: .42em; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; text-align: right; opacity: .7; line-height: 1.3; }
+
 /* video playing through the letterforms */
 .title-wrap { position: relative; }
 .pool-video { position: fixed; left: -9999px; top: 0; width: 160px; height: 90px; opacity: 0; pointer-events: none; }
@@ -659,6 +692,7 @@ h2 { font-size: clamp(38px, 6.4vw, 104px); font-weight: 650; letter-spacing: -.0
   .sound { left: 14px; bottom: calc(14px + env(safe-area-inset-bottom)); }
   .rig { font-size: clamp(9px, 2.95vw, 17px); align-self: center; width: 30em; }
   .rig-row { flex-direction: column; }
+  .bs-type { width: 8.6em; } .bs-top { padding: .7em .7em .4em; gap: .4em; } .knob.bk { width: 1.95em; height: 1.95em; }
   .mx { width: auto; flex-direction: row; align-items: center; gap: .8em; }
   .mx-lcd { width: 6.4em; flex: none; }
   .mx-eq { flex: none; } .mx-knobs { flex-direction: row; gap: .7em; } .mx-k { flex-direction: column; gap: .15em; }
