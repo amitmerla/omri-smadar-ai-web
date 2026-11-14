@@ -110,9 +110,10 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 @keyframes cue { from { translate: 0 -100%; } to { translate: 0 100%; } }
 
 /* title on the left, DJ rig on the right */
-.hero-stage { display: flex; align-items: flex-end; justify-content: space-between; gap: 3vw; }
+.hero-stage { display: flex; align-items: flex-start; justify-content: space-between; gap: 3vw; }
 .title-col { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 @media (min-width: 1100px) { .hero-title { font-size: clamp(56px, 12.6vw, 250px); } }
+@media (min-width: 1100px) { .title-col { padding-top: calc(3.7 * clamp(11px, .9vw, 15px)); } } /* skip the transport strip: the name lines up with the first row of gear */
 @media (max-width: 1099px) { .hero-stage { flex-direction: column; align-items: flex-start; gap: 26px; } }
 
 /* ---------- Sound rig: transport strip + delay pedal. Sized in em so the whole rig scales. ---------- */
