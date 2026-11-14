@@ -405,14 +405,14 @@
     const r = wrap.getBoundingClientRect(); if (!r.width) return;
     tdpr = Math.min(devicePixelRatio || 1, 2);
     tcv.width = Math.round((r.width + PAD * 2) * tdpr); tcv.height = Math.round((r.height + PAD * 2) * tdpr);
-    const cs = getComputedStyle($('.hero-title')), font = `${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
-    const bleed = Math.ceil(parseFloat(cs.fontSize) * 0.08), old = letters, lines = [...wrap.querySelectorAll('.line')];
+    const cs = getComputedStyle($('.hero-title'));
+    const bleed = Math.ceil(parseFloat(cs.fontSize) * 0.13), old = letters, lines = [...wrap.querySelectorAll('.line')];
     letters = [...wrap.querySelectorAll('.ch')].map((ch, i) => {
       // one mask per letter, drawn where the DOM letter sits (offset* ignores the reveal transforms)
       const w = ch.offsetWidth + bleed * 2, h = ch.offsetHeight;
       const mk = () => { const c = document.createElement('canvas'); c.width = Math.round(w * tdpr); c.height = Math.round(h * tdpr); return c; };
       const mask = mk(), scratch = mk(), tmp = mk();
-      const m = mask.getContext('2d'); m.scale(tdpr, tdpr); m.font = font; m.textBaseline = 'alphabetic'; m.fillStyle = '#fff';
+      const m = mask.getContext('2d'); m.scale(tdpr, tdpr); m.font = `${cs.fontWeight} ${getComputedStyle(ch).fontSize} ${cs.fontFamily}`; m.textBaseline = 'alphabetic'; m.fillStyle = '#fff'; // the two lines differ in size
       const mt = m.measureText('M'), asc = mt.fontBoundingBoxAscent, desc = mt.fontBoundingBoxDescent;
       m.fillText(ch.textContent, bleed, (h - (asc + desc)) / 2 + asc);
       return Object.assign(old[i] || { scn: cur, flash: 0, lit: 0, step: -1, lvl: 0, tgt: 0, peak: 0, strike: 0, drop: 0, clip: i % N }, {

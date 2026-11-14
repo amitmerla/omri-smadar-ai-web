@@ -90,6 +90,7 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 .eyebrow { font-size: 12px; letter-spacing: .34em; text-transform: uppercase; color: var(--violet); font-weight: 600; margin-bottom: 18px; }
 .hero-title { font-size: clamp(56px, 16.4vw, 300px); font-weight: 700; line-height: .86; letter-spacing: -.045em; margin-left: -.04em; }
 .hero-title .line { display: block; overflow: hidden; padding-bottom: .04em; white-space: nowrap; }
+.hero-title .line:first-child { font-size: 1.5em; } /* OMRI is the big word */
 .hero-title .ch { display: inline-block; transform: translateY(110%) rotate(8deg); transition: transform 1.3s var(--ease); transition-delay: calc(var(--i) * 55ms + 250ms); will-change: transform; }
 .launched .hero-title .ch { transform: none; }
 .hero-title .line:nth-child(2) .ch { color: transparent; background: linear-gradient(180deg, #fff 18%, #b68cff 70%, #6a3df0 115%); -webkit-background-clip: text; background-clip: text; }
@@ -111,11 +112,11 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 /* title on the left, DJ rig on the right */
 .hero-stage { display: flex; align-items: flex-end; justify-content: space-between; gap: 3vw; }
 .title-col { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-@media (min-width: 1100px) { .hero-title { font-size: clamp(56px, 11.2vw, 220px); } }
+@media (min-width: 1100px) { .hero-title { font-size: clamp(56px, 12.6vw, 250px); } }
 @media (max-width: 1099px) { .hero-stage { flex-direction: column; align-items: flex-start; gap: 26px; } }
 
 /* ---------- Sound rig: transport strip + delay pedal. Sized in em so the whole rig scales. ---------- */
-.rig { position: relative; flex: none; display: flex; flex-direction: column; gap: .6em; width: 39em; font-size: clamp(11px, .98vw, 16px); opacity: 0; transform: translateY(20px); transition: opacity 1.2s var(--ease) 1.4s, transform 1.2s var(--ease) 1.4s; user-select: none; -webkit-user-select: none; }
+.rig { position: relative; flex: none; display: flex; flex-direction: column; gap: .6em; width: 39em; font-size: clamp(11px, .9vw, 15px); opacity: 0; transform: translateY(20px); transition: opacity 1.2s var(--ease) 1.4s, transform 1.2s var(--ease) 1.4s; user-select: none; -webkit-user-select: none; }
 .launched .rig { opacity: 1; transform: none; }
 .rig button { font-family: inherit; }
 .rig-note { font: 600 10.5px/1.4 ui-monospace, "SF Mono", Menlo, monospace; letter-spacing: .04em; color: var(--dim); text-align: center; min-height: 2.8em; }
