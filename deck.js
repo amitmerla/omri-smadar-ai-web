@@ -823,7 +823,7 @@
   // Panel state. K = the five knobs (0..1). T = tempo: synced to a beat (tapped, or the track's) or free.
   const K = { time: 0.5, repeats: 0.45, tweak: 0.33, tweez: 1, mix: 0.35 };
   const T = { sync: true, sub: 3, beat: 60 / NOMINAL_BPM, auto: true };
-  const SEL = { pos: 12, legacy: true, active: 'A' };
+  const SEL = { pos: 12, legacy: true, active: null }; // the pedal starts bypassed: press A, B or C to bring it in
   const PRESETS = {
     A: { pos: 12, legacy: true, sync: true, sub: 3, time: 0.5, repeats: 0.45, tweak: 0.33, tweez: 1, mix: 0.35 },   // Ping Pong, dotted eighths
     B: { pos: 2, legacy: true, sync: true, sub: 4, time: 0.67, repeats: 0.55, tweak: 0.5, tweez: 0.4, mix: 0.4 },   // Tape Echo, quarters
@@ -1003,7 +1003,7 @@
   const GEAR = {
     pd: { name: 'OS4 MkII delay pedal', desc: '30 delay models, looper, tap tempo', color: '#2fa25a', els: ['.pd', '#pdRead'],
       off() { SEL.active = null; if (ctx) { LP.rec = null; lpStopSrc(); LP.state = LP.layers.length ? 'stop' : 'empty'; } apply(); },
-      on() { if (!SEL.active && !looper()) recall('A'); } },
+      on() {} },
     td: { name: 'OS-3-MO bass line', desc: 'Acid bass synth with 16-step sequencer', color: '#c4c8ce', els: ['#td'], off() { if (SQ.run) $('#tdRun').click(); }, on() {} },
     ms: { name: 'OS-101 monosynth', desc: 'Red keyboard synth: faders, arpeggiator, sequencer', color: '#e02a20', els: ['#ms'], off() { msStop(); }, on() {} }
   };
